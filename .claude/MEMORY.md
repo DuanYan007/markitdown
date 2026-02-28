@@ -1,6 +1,8 @@
 # MarkItDown 项目记忆
 
 > 最后更新: 2025-02-28
+>
+> **重要更新**: 2025-02-28 完成 Web 应用代码架构重构 (见下方架构变更记录)
 > 作者: DuanYan (GitHub: DuanYan007)
 > 许可证: MIT License
 
@@ -28,9 +30,29 @@ markitdown/
 │   ├── pyproject.toml       # Python 项目配置
 │   └── README.md
 │
-├── markitdown-web/          # Web 应用 (Flask)
+├── markitdown-web/          # Web 应用 (Flask) - 已重构为模块化架构
 │   └── conveter/
-│       ├── app.py                   # Flask 主应用
+│       ├── app.py                   # 应用入口 (精简为 ~80 行)
+│       ├── api/                     # 路由蓝图层
+│       │   ├── main.py              # 主页面路由
+│       │   ├── conversion.py        # 转换路由
+│       │   ├── batch.py             # 批量处理路由
+│       │   ├── config.py            # 配置管理路由
+│       │   ├── history.py           # 历史记录路由
+│       │   └── files.py             # 文件服务路由
+│       ├── services/                # 业务逻辑层
+│       │   ├── conversion_service.py # 转换服务
+│       │   ├── batch_service.py      # 批量转换服务
+│       │   ├── history_service.py    # 历史记录服务
+│       │   └── format_service.py     # 格式检测服务
+│       ├── utils/                   # 工具函数层
+│       │   ├── logging_config.py     # 日志配置
+│       │   ├── path_helpers.py       # 路径处理
+│       │   └── image_path_processor.py # 图片路径处理
+│       ├── core/                    # 核心配置
+│       │   └── extensions.py         # 扩展初始化
+│       ├── middleware/               # 中间件
+│       │   └── error_handlers.py     # 错误处理
 │       ├── config_manager.py        # 动态配置管理
 │       ├── file_migrator.py         # 文件迁移器
 │       ├── converters/              # 转换器模块
@@ -249,6 +271,34 @@ MCP 使用远程 API，Web 应用使用本地 PP-StructureV3
 - 存储路径
 - 文件大小限制
 - 历史记录数量
+
+---
+
+## 架构变更记录
+
+### 2025-02-28: Web 应用代码架构重构
+
+**重构原因**: 原 `app.py` 文件过大（1440行），包含路由、业务逻辑、工具函数，难以维护和测试。
+
+**重构内容**:
+1. 将单体 `app.py` 拆分为清晰的分层架构
+2. 实现 Flask Blueprint 路由模块化
+3. 服务层与路由层分离
+4. 工具函数独立成模块
+5. 保持所有 API 端点兼容
+
+**新增文件结构**:
+```
+conveter/
+├── app.py              # 应用入口 (精简为 ~80 行)
+├── api/                # 路由蓝图层 (7个文件)
+├── services/           # 业务逻辑层 (4个文件)
+├── utils/              # 工具函数层 (4个文件)
+├── core/               # 核心配置 (2个文件)
+└── middleware/         # 中间件 (2个文件)
+```
+
+**已验证**: 应用可以正常启动，所有蓝图已注册。
 
 ---
 

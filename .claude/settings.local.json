@@ -15,7 +15,8 @@
       "Bash(tskill:*)",
       "Bash(timeout:*)",
       "Bash(tasklist:*)",
-      "Bash(cmd:*)"
+      "Bash(cmd:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []

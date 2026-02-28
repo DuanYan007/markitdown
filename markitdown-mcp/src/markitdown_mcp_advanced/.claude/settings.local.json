@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//o/Project/markitdown/markitdown-mcp/**)",
+      "Bash(mkdir:*)",
+      "Bash(tree:*)",
+      "Read(//o/Project/markitdown/markitdown-web/conveter/converters/**)",
+      "Read(//c/Users/Administrator/Desktop/开源项目测试/**)",
+      "Bash(python:*)",
+      "Bash(pip show:*)",
+      "Read(//o/Project/markitdown/temp/**)",
+      "Bash(for:*)",
+      "Bash(do echo:*)",
+      "Bash(head:*)",
+      "Bash(done)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

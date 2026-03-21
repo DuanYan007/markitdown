@@ -43,7 +43,7 @@
         <slf4j.version>2.0.9</slf4j.version>
         <logback.version>1.4.14</logback.version>
         <apache.poi.version>5.2.5</apache.poi.version>
-        <pdfbox.version>3.0.1</pdfbox.version>
+        <pdfbox.version>2.0.30</pdfbox.version>
         <jsoup.version>1.17.2</jsoup.version>
         <tess4j.version>5.8.0</tess4j.version>
         <jackson.version>2.16.1</jackson.version>
@@ -81,6 +81,21 @@
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
             <version>${pdfbox.version}</version>
+        </dependency>
+
+        <!-- PDFBox tools for text extraction -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox-tools</artifactId>
+            <version>2.0.30</version>
+        </dependency>
+
+        <!-- Tika PDF parser -->
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-parsers-standard-package</artifactId>
+            <version>2.9.1</version>
+            <type>pom</type>
         </dependency>
 
         <!-- Jsoup for HTML parsing -->
@@ -144,6 +159,8 @@
     </dependencies>
 
     <build>
+        <sourceDirectory>java</sourceDirectory>
+        <testSourceDirectory>src/test/java</testSourceDirectory>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -179,6 +196,7 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
+                            <minimizeJar>false</minimizeJar>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>com.markitdown.MarkItDownApplication</mainClass>
@@ -200,9 +218,14 @@
                                         <exclude>META-INF/*.RSA</exclude>
                                         <exclude>META-INF/versions/**</exclude>
                                         <exclude>META-INF/maven/**</exclude>
-                                        <exclude>**/*.md</exclude>
-                                        <exclude>**/*.txt</exclude>
                                     </excludes>
+                                </filter>
+                                <!-- 保留PDFBox资源文件 -->
+                                <filter>
+                                    <artifact>org.apache.pdfbox:*</artifact>
+                                    <includes>
+                                        <include>**</include>
+                                    </includes>
                                 </filter>
                                 <!-- 保留XMLBeans相关类 -->
                                 <filter>

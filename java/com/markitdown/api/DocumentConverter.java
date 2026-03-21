@@ -3,6 +3,7 @@ package com.markitdown.api;
 import com.markitdown.config.ConversionOptions;
 import com.markitdown.exception.ConversionException;
 
+import java.io.InputStream;
 import java.nio.file.Path;
 
 /**
@@ -10,15 +11,16 @@ import java.nio.file.Path;
  * @brief 文档转换器接口，定义了将各种文件格式转换为Markdown的规范
  * @details 所有具体的文档转换器实现都必须实现此接口，支持不同文件格式的转换
  *          提供了转换支持检查、优先级管理和转换器标识等核心功能
+ *          支持 Path 和 InputStream 两种输入方式，便于流式处理和管道操作
  *
  * @author duan yan
- * @version 2.0.0
+ * @version 2.1.0
  * @since 2.0.0
  */
 public interface DocumentConverter {
 
     /**
-     * @brief 将文档文件转换为Markdown格式
+     * @brief 将文档文件转换为Markdown格式（基于文件路径）
      * @details 核心转换方法，将指定路径的文档文件转换为Markdown内容
      *          支持通过转换选项控制转换行为和输出格式
      * @param filePath 要转换的文档文件路径，不能为null
@@ -27,6 +29,36 @@ public interface DocumentConverter {
      * @throws ConversionException 当转换失败时抛出异常
      */
     ConversionResult convert(Path filePath, ConversionOptions options) throws ConversionException;
+
+    /**
+     * @brief 将文档流转换为Markdown格式（基于输入流）
+     * @details 流式转换方法，从输入流读取文档内容并转换为Markdown
+     *          支持管道输入、内存流等场景，避免创建临时文件
+     * @param inputStream 包含文档内容的输入流，不能为null
+     * @param mimeType    文档的MIME类型，用于选择正确的解析方式
+     * @param options     转换选项配置，可以为null（使用默认配置）
+     * @return ConversionResult 包含Markdown内容和元数据的转换结果
+     * @throws ConversionException 当转换失败时抛出异常
+     * @since 2.1.0
+     */
+    default ConversionResult convert(InputStream inputStream, String mimeType, ConversionOptions options) throws ConversionException {
+        // 默认实现：不支持流式转换，抛出异常
+        throw new ConversionException(
+            "Stream-based conversion is not supported by " + getName() + ". Use Path-based convert() method instead.",
+            "stream",
+            getName()
+        );
+    }
+
+    /**
+     * @brief 检查是否支持流式转换
+     * @details 用于判断转换器是否支持从 InputStream 读取数据
+     * @return boolean true表示支持流式转换，false表示不支持
+     * @since 2.1.0
+     */
+    default boolean supportsStreaming() {
+        return false;
+    }
 
     /**
      * @brief 检查是否支持指定的MIME类型

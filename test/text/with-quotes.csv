@@ -1,5 +1,0 @@
-id,title,note
-1,"""Quoted"" title","Contains comma, quote, and newline"
-2,Address,"Room 502, Building A"
-3,Multiline,"Line one
-Line two"

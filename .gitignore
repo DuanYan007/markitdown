@@ -92,3 +92,13 @@ output/
 
 # Tesseract OCR data
 tessdata/
+
+# Test files and directories
+test/
+test-target/
+
+# Temporary documentation
+PDF_FIX_REPORT.md
+REFACTORING_STATUS.md
+SOLUTION_SUMMARY.md
+test.md

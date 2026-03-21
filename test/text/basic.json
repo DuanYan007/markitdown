@@ -1,0 +1,15 @@
+{
+  "name": "Test User",
+  "age": 30,
+  "city": "Beijing",
+  "skills": [
+    "Java",
+    "Python",
+    "JavaScript"
+  ],
+  "address": {
+    "street": "Main Street",
+    "zip": "100000"
+  },
+  "marker": "JSON_12345"
+}

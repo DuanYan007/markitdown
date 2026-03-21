@@ -16,7 +16,8 @@
       "Bash(timeout:*)",
       "Bash(tasklist:*)",
       "Bash(cmd:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

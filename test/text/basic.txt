@@ -1,0 +1,10 @@
+Test Text Document
+
+This is a plain text file used for conversion testing.
+
+Features:
+- Multiple paragraphs
+- Simple lists
+- Marker: TXT_MARKER_7890
+
+End of file.

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns:catalog xmlns:ns="http://example.com/ns/books" xmlns:meta="http://example.com/ns/meta">
+  <ns:book id="b1"><ns:title>Markup Testing Guide</ns:title><meta:author>A. Writer</meta:author></ns:book>
+  <ns:book id="b2"><ns:title>Conversion Handbook</ns:title><meta:author>B. Editor</meta:author></ns:book>
+</ns:catalog>

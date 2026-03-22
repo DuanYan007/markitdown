@@ -50,6 +50,18 @@ public class ConversionOptions {
     private String imageFormat = "markdown";
 
     /**
+     * @brief 图片输出目录配置
+     * @details 指定从文档中提取的图片保存目录，相对于输出文件路径
+     */
+    private String imageOutputDir = "assets";
+
+    /**
+     * @brief 输出文件路径配置
+     * @details 用于确定图片提取的保存位置
+     */
+    private Path outputPath;
+
+    /**
      * @brief OCR语言配置
      * @details 指定OCR文本识别时使用的语言，默认为auto自动检测
      */
@@ -95,6 +107,8 @@ public class ConversionOptions {
         this.includeMetadata = other.includeMetadata;
         this.tableFormat = other.tableFormat;
         this.imageFormat = other.imageFormat;
+        this.imageOutputDir = other.imageOutputDir;
+        this.outputPath = other.outputPath;
         this.language = other.language;
         this.maxFileSize = other.maxFileSize;
         this.tempDirectory = other.tempDirectory;
@@ -201,6 +215,46 @@ public class ConversionOptions {
      */
     public ConversionOptions setImageFormat(String imageFormat) {
         this.imageFormat = imageFormat;
+        return this;
+    }
+
+    /**
+     * Gets the image output directory for extracted images.
+     *
+     * @return the image output directory path
+     */
+    public String getImageOutputDir() {
+        return imageOutputDir;
+    }
+
+    /**
+     * Sets the image output directory for extracted images.
+     *
+     * @param imageOutputDir the directory path (relative to output file)
+     * @return this instance for method chaining
+     */
+    public ConversionOptions setImageOutputDir(String imageOutputDir) {
+        this.imageOutputDir = imageOutputDir;
+        return this;
+    }
+
+    /**
+     * Gets the output file path for determining image extraction location.
+     *
+     * @return the output file path
+     */
+    public Path getOutputPath() {
+        return outputPath;
+    }
+
+    /**
+     * Sets the output file path for determining image extraction location.
+     *
+     * @param outputPath the output file path
+     * @return this instance for method chaining
+     */
+    public ConversionOptions setOutputPath(Path outputPath) {
+        this.outputPath = outputPath;
         return this;
     }
 
@@ -355,6 +409,16 @@ public class ConversionOptions {
 
         public Builder imageFormat(String imageFormat) {
             options.setImageFormat(imageFormat);
+            return this;
+        }
+
+        public Builder imageOutputDir(String imageOutputDir) {
+            options.setImageOutputDir(imageOutputDir);
+            return this;
+        }
+
+        public Builder outputPath(Path outputPath) {
+            options.setOutputPath(outputPath);
             return this;
         }
 

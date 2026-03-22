@@ -4,16 +4,23 @@ import com.markitdown.api.ConversionResult;
 import com.markitdown.api.DocumentConverter;
 import com.markitdown.config.ConversionOptions;
 import com.markitdown.exception.ConversionException;
+import com.markitdown.ocr.OcrEngine;
+import com.markitdown.ocr.TesseractOcrEngine;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.*;
+
+import javax.imageio.ImageIO;
 
 import static java.util.Objects.requireNonNull;
 
@@ -100,18 +107,85 @@ public class PdfConverter implements DocumentConverter {
             // 提取所有页面的文本
             String text = textStripper.getText(document);
 
+            // 如果文本为空且启用了OCR,则对扫描PDF进行OCR识别
+            if ((text == null || text.trim().isEmpty()) && options.isUseOcr()) {
+                logger.info("PDF文本为空,启用OCR进行扫描页面识别");
+                return extractTextFromScannedPdf(document, options);
+            }
+
             if (text == null || text.trim().isEmpty()) {
                 return "*无法提取PDF文本内容。这可能是因为：*\n\n" +
                        "1. PDF是扫描版图片格式\n" +
                        "2. PDF使用了特殊编码\n" +
                        "3. PDF文件损坏\n\n" +
-                       "*建议：尝试使用OCR工具处理扫描版PDF*";
+                       "*建议：使用 --ocr 选项对扫描PDF进行OCR识别*";
             }
 
             return text;
         } catch (Exception e) {
             logger.warn("使用PDFBox提取文本失败: {}", e.getMessage());
             return extractTextFallback(pdfFile);
+        }
+    }
+
+    /**
+     * 对扫描PDF进行OCR识别
+     */
+    private String extractTextFromScannedPdf(PDDocument document, ConversionOptions options) throws IOException {
+        try {
+            logger.info("开始对扫描PDF进行OCR识别,共{}页", document.getNumberOfPages());
+
+            StringBuilder ocrText = new StringBuilder();
+            PDFRenderer renderer = new PDFRenderer(document);
+
+            // 创建OCR引擎
+            OcrEngine ocrEngine = new TesseractOcrEngine();
+
+            for (int pageNum = 0; pageNum < document.getNumberOfPages(); pageNum++) {
+                logger.info("正在OCR识别第{}页...", pageNum + 1);
+
+                // 将PDF页面渲染为图像
+                BufferedImage image = renderer.renderImageWithDPI(pageNum, 300, ImageType.RGB);
+
+                // 保存临时图像文件用于OCR
+                File tempImage = File.createTempFile("pdf_page_", ".png");
+                try {
+                    javax.imageio.ImageIO.write(image, "png", tempImage);
+
+                    // 执行OCR识别
+                    String pageText = ocrEngine.extractText(tempImage);
+
+                    if (pageNum > 0) {
+                        ocrText.append("\n\n");
+                    }
+                    ocrText.append("### 第").append(pageNum + 1).append("页\n\n");
+                    ocrText.append(pageText);
+
+                    logger.info("第{}页OCR完成,提取{}字符", pageNum + 1, pageText.length());
+
+                } finally {
+                    // 清理临时文件
+                    if (tempImage.exists()) {
+                        tempImage.delete();
+                    }
+                }
+            }
+
+            String result = ocrText.toString();
+            if (result.trim().isEmpty()) {
+                return "*OCR识别未提取到文本内容。可能原因:\n\n" +
+                       "1. PDF页面质量过低\n" +
+                       "2. 图像分辨率不足\n" +
+                       "3. 语言包不匹配\n\n" +
+                       "*建议: 检查PDF质量或使用更高DPI设置*";
+            }
+
+            return result;
+
+        } catch (Exception e) {
+            logger.error("扫描PDF OCR处理失败: {}", e.getMessage(), e);
+            return "*OCR处理失败: " + e.getMessage() + "\n\n" +
+                   "*建议: 确保Tesseract正确安装并配置了中文语言包*";
         }
     }
 

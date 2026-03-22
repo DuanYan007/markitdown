@@ -6,6 +6,8 @@ import com.markitdown.api.ConversionResult;
 import com.markitdown.api.DocumentConverter;
 import com.markitdown.config.ConversionOptions;
 import com.markitdown.exception.ConversionException;
+import com.markitdown.model.ExtractedImage;
+import com.markitdown.util.ImageExtractor;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.*;
 import org.slf4j.Logger;
@@ -36,6 +38,7 @@ public class DocxConverter implements DocumentConverter {
     private static final Logger logger = LoggerFactory.getLogger(DocxConverter.class);
 
     private MarkdownBuilder mb;
+    private int currentImageIndex = 0;  // 当前图片索引，用于按顺序分配图片
 
     /**
      * @param filePath 要转换的DOCX文件路径，不能为null
@@ -68,7 +71,7 @@ public class DocxConverter implements DocumentConverter {
             }
 
             // 将文档转换为Markdown
-            String markdownContent = convertToMarkdown(document, metadata, options);
+            String markdownContent = convertToMarkdown(document, metadata, options, filePath);
 
             List<String> warnings = new ArrayList<>();
 
@@ -149,13 +152,13 @@ public class DocxConverter implements DocumentConverter {
      * @details 生成完整的Markdown文档结构，包括标题、元数据信息和主要内容
      * 根据转换选项控制是否包含元数据部分
      */
-    private String convertToMarkdown(XWPFDocument document, Map<String, Object> metadata, ConversionOptions options) {
+    private String convertToMarkdown(XWPFDocument document, Map<String, Object> metadata, ConversionOptions options, Path filePath) {
         // 如果有标题则添加标题
         if (options.isIncludeMetadata() && !metadata.isEmpty()) {
             mb.header(metadata);
         }
         // 处理文档内容
-        processDocumentBody(document, options);
+        processDocumentBody(document, options, filePath);
 
         return mb.flush().toString();
     }
@@ -168,11 +171,19 @@ public class DocxConverter implements DocumentConverter {
      * 根据转换选项控制是否包含表格内容
      */
     // 使用getParagraph 获取文档主要内容
-    private void processDocumentBody(XWPFDocument document, ConversionOptions options) {
+    private void processDocumentBody(XWPFDocument document, ConversionOptions options, Path filePath) {
         mb.append(mb.heading("内容", 2));
+
+        // 提取图片（如果启用）
+        List<com.markitdown.model.ExtractedImage> extractedImages = null;
+        if (options.isIncludeImages()) {
+            extractedImages = extractImages(document, options);
+            currentImageIndex = 0;  // 重置图片索引
+        }
+
         // 处理段落
         for (XWPFParagraph paragraph : document.getParagraphs()) {
-            processParagraph(document, paragraph, options);
+            processParagraph(document, paragraph, options, extractedImages);
         }
 
         // 处理表格
@@ -196,16 +207,64 @@ public class DocxConverter implements DocumentConverter {
     /**
      * @param paragraph 要处理的段落对象，不能为null
      * @param options   转换选项配置，不能为null
+     * @param extractedImages 提取的图片列表
      * @brief 处理单个段落并转换为Markdown格式
      * @details 根据段落样式识别标题、列表项和普通段落，并应用相应的Markdown格式
      * 支持多层标题、列表缩进和格式化文本的处理
      */
 
-    private void processParagraph(XWPFDocument document, XWPFParagraph paragraph, ConversionOptions options) {
+    private void processParagraph(XWPFDocument document, XWPFParagraph paragraph, ConversionOptions options, List<ExtractedImage> extractedImages) {
         String text = paragraph.getText();
         if (text == null || text.trim().isEmpty()) {
             mb.newline();
             return;
+        }
+
+        // 检查段落中是否包含图片并插入引用
+        if (extractedImages != null && !extractedImages.isEmpty()) {
+            // 策略1: 检查Run中的嵌入图片
+            boolean foundPictureInRun = false;
+            for (XWPFRun run : paragraph.getRuns()) {
+                for (XWPFPicture picture : run.getEmbeddedPictures()) {
+                    foundPictureInRun = true;
+                    // 找到对应的提取图片
+                    ExtractedImage extractedImage = findExtractedImage(picture, extractedImages);
+                    if (extractedImage != null) {
+                        mb.append(extractedImage.toMarkdown("图片")).newline();
+                    }
+                }
+            }
+
+            // 策略2: 如果段落文本包含"Embedded image"，则按顺序插入图片引用
+            if (!foundPictureInRun && text.toLowerCase().contains("embedded image")) {
+                // 从段落文本中提取图片文件名
+                String imageFilename = extractImageFilename(text);
+                if (imageFilename != null) {
+                    // 策略2a: 尝试通过文件名匹配
+                    boolean found = false;
+                    for (ExtractedImage img : extractedImages) {
+                        if (img.getOriginalFilename().equals(imageFilename)) {
+                            mb.append(img.toMarkdown("图片")).newline();
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    // 策略2b: 如果文件名不匹配，按索引分配
+                    if (!found && currentImageIndex < extractedImages.size()) {
+                        ExtractedImage img = extractedImages.get(currentImageIndex);
+                        mb.append(img.toMarkdown("图片")).newline();
+                        currentImageIndex++;
+                    }
+                } else {
+                    // 策略2c: 无法提取文件名时，按索引分配
+                    if (currentImageIndex < extractedImages.size()) {
+                        ExtractedImage img = extractedImages.get(currentImageIndex);
+                        mb.append(img.toMarkdown("图片")).newline();
+                        currentImageIndex++;
+                    }
+                }
+            }
         }
         //根据样式处理标题
         String style = getStyle(document, paragraph);
@@ -357,5 +416,96 @@ public class DocxConverter implements DocumentConverter {
             return key.replaceAll("([a-z])([A-Z])", "$1 $2")
                     .replaceAll("^([a-z])", String.valueOf(Character.toUpperCase(key.charAt(0))))
                     .toLowerCase();
+        }
+
+        /**
+         * @brief 提取Word文档中的图片并保存到指定位置
+         * @param document Word文档对象
+         * @param options 转换选项
+         * @return 提取的图片列表
+         */
+        private List<ExtractedImage> extractImages(XWPFDocument document, ConversionOptions options) {
+            try {
+                Path outputPath = options.getOutputPath();
+
+                if (outputPath == null) {
+                    logger.warn("输出路径未设置，跳过图片提取");
+                    return new ArrayList<>();
+                }
+
+                // 获取输出文件名称（不含扩展名）
+                String outputFileName = outputPath.getFileName().toString();
+                if (outputFileName.contains(".")) {
+                    outputFileName = outputFileName.substring(0, outputFileName.lastIndexOf("."));
+                }
+
+                // 创建图片提取器，使用输出文件所在目录
+                ImageExtractor extractor = new ImageExtractor(
+                        outputPath.getParent(),
+                        options.getImageOutputDir(),
+                        outputFileName
+                );
+
+                // 提取图片
+                List<XWPFPictureData> pictures = document.getAllPictures();
+                return extractor.extractPictures(pictures, outputPath.getParent());
+
+            } catch (Exception e) {
+                logger.warn("图片提取失败: {}", e.getMessage());
+                return new ArrayList<>();
+            }
+        }
+
+        /**
+         * @brief 根据图片数据查找对应的提取图片
+         * @param picture Word文档中的图片对象
+         * @param extractedImages 已提取的图片列表
+         * @return 对应的提取图片，如果找不到则返回null
+         */
+        private ExtractedImage findExtractedImage(XWPFPicture picture, List<ExtractedImage> extractedImages) {
+            try {
+                XWPFPictureData pictureData = picture.getPictureData();
+                String filename = pictureData.getFileName();
+
+                // 通过文件名查找对应的提取图片
+                for (ExtractedImage img : extractedImages) {
+                    if (filename.equals(img.getOriginalFilename())) {
+                        return img;
+                    }
+                }
+            } catch (Exception e) {
+                logger.debug("查找图片失败: {}", e.getMessage());
+            }
+            return null;
+        }
+
+        /**
+         * @brief 从段落文本中提取图片文件名
+         * @param text 段落文本，如 "Embedded image: sample.png"
+         * @return 图片文件名，如果找不到则返回null
+         */
+        private String extractImageFilename(String text) {
+            if (text == null || text.isEmpty()) {
+                return null;
+            }
+
+            // 匹配 "Embedded image: filename.ext" 格式
+            String[] patterns = {
+                "Embedded image:\\s*(\\S+)",
+                "image:\\s*(\\S+)",
+                "图片[：:]\\s*(\\S+)"
+            };
+
+            for (String pattern : patterns) {
+                java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern, java.util.regex.Pattern.CASE_INSENSITIVE);
+                java.util.regex.Matcher m = p.matcher(text);
+                if (m.find()) {
+                    String filename = m.group(1).trim();
+                    logger.debug("从文本中提取到图片文件名: {}", filename);
+                    return filename;
+                }
+            }
+
+            return null;
         }
     }

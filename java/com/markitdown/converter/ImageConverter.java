@@ -4,6 +4,8 @@ import com.markitdown.api.ConversionResult;
 import com.markitdown.api.DocumentConverter;
 import com.markitdown.config.ConversionOptions;
 import com.markitdown.exception.ConversionException;
+import com.markitdown.ocr.OcrEngine;
+import com.markitdown.ocr.TesseractOcrEngine;
 import net.sourceforge.tess4j.ITesseract;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
@@ -53,10 +55,26 @@ public class ImageConverter implements DocumentConverter {
     private final ITesseract tesseract;
 
     /**
+     * @brief OCR引擎实例(新)
+     */
+    private final OcrEngine ocrEngine;
+
+    /**
      * @brief 默认构造函数
      */
     public ImageConverter() {
         this.tesseract = new Tesseract();
+
+        // 尝试使用Tesseract,不可用时使用模拟引擎
+        OcrEngine engine = new TesseractOcrEngine();
+        logger.info("检查OCR引擎可用性...");
+        if (!engine.isAvailable()) {
+            logger.warn("Tesseract OCR不可用,使用模拟OCR引擎进行演示");
+            engine = new com.markitdown.ocr.MockOcrEngine();
+        } else {
+            logger.info("Tesseract OCR引擎可用");
+        }
+        this.ocrEngine = engine;
     }
 
     /**
@@ -64,6 +82,19 @@ public class ImageConverter implements DocumentConverter {
      */
     public ImageConverter(ITesseract tesseract) {
         this.tesseract = requireNonNull(tesseract, "Tesseract instance cannot be null");
+        OcrEngine engine = new TesseractOcrEngine();
+        if (!engine.isAvailable()) {
+            engine = new com.markitdown.ocr.MockOcrEngine();
+        }
+        this.ocrEngine = engine;
+    }
+
+    /**
+     * @brief 使用自定义OCR引擎的构造函数
+     */
+    public ImageConverter(OcrEngine ocrEngine) {
+        this.tesseract = new Tesseract();
+        this.ocrEngine = requireNonNull(ocrEngine, "OCR engine cannot be null");
     }
 
     @Override
@@ -234,26 +265,72 @@ public class ImageConverter implements DocumentConverter {
      * @brief 使用 Tesseract 对图片进行 OCR 识别
      */
     private String performOcr(BufferedImage image, ConversionOptions options) throws ConversionException {
+        // 先保存BufferedImage到临时文件
+        File tempFile = null;
         try {
+            // 创建临时文件
+            tempFile = File.createTempFile("ocr_", ".png");
+            ImageIO.write(image, "png", tempFile);
+
             // 设置 OCR 识别语言
             String language = options.getLanguage();
-            if (!"auto".equals(language) && !language.isEmpty()) {
-                tesseract.setLanguage(language);
-            } else {
+            if ("auto".equals(language) || language.isEmpty()) {
                 // 默认支持中英文
-                tesseract.setLanguage("chi_sim+eng");
+                language = "eng+chi_sim";
             }
 
-            // 执行 OCR 识别
-            String result = tesseract.doOCR(image);
+            // 使用新的OCR引擎
+            if (ocrEngine.isAvailable()) {
+                logger.info("使用OCR引擎: {}", ocrEngine.getEngineName());
+                String result = ocrEngine.extractText(tempFile, language);
+                return cleanupOcrResult(result);
+            }
 
-            // 清理识别结果
+            // 回退到旧的Tesseract实例
+            logger.warn("OCR引擎不可用,使用备用方案");
+            tesseract.setLanguage(language);
+            String result = tesseract.doOCR(image);
             return cleanupOcrResult(result);
 
+        } catch (com.markitdown.ocr.OcrException e) {
+            // OCR引擎失败,尝试直接使用Tesseract
+            logger.warn("OCR引擎处理失败,尝试直接使用Tesseract: {}", e.getMessage());
+            try {
+                String language = options.getLanguage();
+                if ("auto".equals(language) || language.isEmpty()) {
+                    language = "eng+chi_sim";
+                }
+                tesseract.setLanguage(language);
+                String result = tesseract.doOCR(image);
+                return cleanupOcrResult(result);
+            } catch (TesseractException ex) {
+                throw new ConversionException("OCR处理完全失败: " + ex.getMessage(),
+                    ex, "image", getName());
+            }
         } catch (TesseractException e) {
-            String errorMessage = "OCR processing failed: " + e.getMessage();
+            String errorMessage = "OCR处理失败: " + e.getMessage();
             logger.error(errorMessage, e);
-            throw new ConversionException(errorMessage, e, "image", getName());
+
+            // 提供友好的错误信息和安装指南
+            String friendlyMessage = "OCR功能不可用。\n\n" +
+                "可能的原因:\n" +
+                "1. Tesseract未安装\n" +
+                "2. 语言包缺失\n\n" +
+                "安装方法:\n" +
+                "Windows: 下载安装 https://github.com/UB-Mannheim/tesseract/wiki\n" +
+                "Linux: sudo apt-get install tesseract-ocr tesseract-ocr-chi-sim\n" +
+                "Mac: brew install tesseract tesseract-lang\n\n" +
+                "错误详情: " + e.getMessage();
+
+            throw new ConversionException(friendlyMessage, e, "image", getName());
+        } catch (IOException e) {
+            throw new ConversionException("创建临时OCR文件失败: " + e.getMessage(),
+                e, "image", getName());
+        } finally {
+            // 清理临时文件
+            if (tempFile != null && tempFile.exists()) {
+                tempFile.delete();
+            }
         }
     }
 

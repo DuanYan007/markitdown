@@ -71,7 +71,7 @@ public class MarkItDownCommand implements Callable<Integer> {
             names = {"--include-images"},
             description = "Include images in the output (default: true)"
     )
-    private Boolean includeImages = true;
+    private Boolean includeImages = null;
 
     @Option(
             names = {"--no-images"},
@@ -83,7 +83,7 @@ public class MarkItDownCommand implements Callable<Integer> {
             names = {"--include-tables"},
             description = "Include tables in the output (default: true)"
     )
-    private Boolean includeTables = true;
+    private Boolean includeTables = null;
 
     @Option(
             names = {"--no-tables"},
@@ -95,7 +95,7 @@ public class MarkItDownCommand implements Callable<Integer> {
             names = {"--include-metadata"},
             description = "Include metadata in the output (default: true)"
     )
-    private Boolean includeMetadata = true;
+    private Boolean includeMetadata = null;
 
     @Option(
             names = {"--no-metadata"},
@@ -133,6 +133,13 @@ public class MarkItDownCommand implements Callable<Integer> {
             defaultValue = "markdown"
     )
     private String imageFormat;
+
+    @Option(
+            names = {"--image-output-dir"},
+            description = "Directory for extracted images relative to output file (default: assets/)",
+            defaultValue = "assets"
+    )
+    private String imageOutputDir;
 
     // ==================== 文件选项 ====================
 
@@ -675,6 +682,7 @@ public class MarkItDownCommand implements Callable<Integer> {
                .language(language)
                .tableFormat(tableFormat)
                .imageFormat(imageFormat)
+               .imageOutputDir(imageOutputDir)
                .maxFileSize(effectiveMaxFileSize);
 
         if (tempDir != null) {
@@ -710,8 +718,32 @@ public class MarkItDownCommand implements Callable<Integer> {
             throw new ConversionException("Unsupported file type: " + inputFile);
         }
 
+        // Determine output path for image extraction and file writing
+        Path outputPath;
+        if (output != null) {
+            outputPath = determineOutputPath(inputPath);
+        } else {
+            // Default to input filename with .md extension in same directory
+            String fileName = inputPath.getFileName().toString();
+            outputPath = inputPath.getParent().resolve(fileName + ".md");
+        }
+
+        // Set output path in options for image extraction
+        ConversionOptions optionsWithPath = ConversionOptions.builder()
+                .includeImages(options.isIncludeImages())
+                .includeTables(options.isIncludeTables())
+                .includeMetadata(options.isIncludeMetadata())
+                .useOcr(options.isUseOcr())
+                .language(options.getLanguage())
+                .tableFormat(options.getTableFormat())
+                .imageFormat(options.getImageFormat())
+                .imageOutputDir(options.getImageOutputDir())
+                .outputPath(outputPath)
+                .maxFileSize(options.getMaxFileSize())
+                .build();
+
         // Convert the file
-        ConversionResult result = engine.convert(inputPath, options);
+        ConversionResult result = engine.convert(inputPath, optionsWithPath);
 
         // Determine output destination
         if (output == null && inputFiles.length == 1) {
@@ -719,7 +751,6 @@ public class MarkItDownCommand implements Callable<Integer> {
             System.out.println(result.getMarkdown());
         } else {
             // Multiple files or output specified -> write to file
-            Path outputPath = determineOutputPath(inputPath);
             writeResult(result, outputPath);
 
             if (!quiet && !showProgress) {

@@ -279,10 +279,17 @@ public class ImageConverter implements DocumentConverter {
                 language = "eng+chi_sim";
             }
 
-            // 使用新的OCR引擎
-            if (ocrEngine.isAvailable()) {
-                logger.info("使用OCR引擎: {}", ocrEngine.getEngineName());
-                String result = ocrEngine.extractText(tempFile, language);
+            // 使用新的OCR引擎，优先使用配置文件中的路径
+            OcrEngine effectiveOcrEngine = ocrEngine;
+            String tessdataPath = (String) options.getCustomOption("tessdataPath");
+            if (tessdataPath != null && !tessdataPath.isEmpty()) {
+                // 创建使用配置路径的OCR引擎
+                effectiveOcrEngine = new com.markitdown.ocr.TesseractOcrEngine(tessdataPath);
+            }
+
+            if (effectiveOcrEngine.isAvailable()) {
+                logger.info("使用OCR引擎: {}", effectiveOcrEngine.getEngineName());
+                String result = effectiveOcrEngine.extractText(tempFile, language);
                 return cleanupOcrResult(result);
             }
 

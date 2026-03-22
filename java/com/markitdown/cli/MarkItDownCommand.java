@@ -3,6 +3,7 @@ package com.markitdown.cli;
 import com.markitdown.api.ConversionResult;
 import com.markitdown.api.DocumentConverter;
 import com.markitdown.config.ConversionOptions;
+import com.markitdown.config.ConfigurationManager;
 import com.markitdown.converter.*;
 import com.markitdown.core.ConverterRegistry;
 import com.markitdown.core.MarkItDownEngine;
@@ -18,6 +19,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -64,6 +70,12 @@ public class MarkItDownCommand implements Callable<Integer> {
             description = "Output file or directory (default: stdout for pipe, .md file for file input)"
     )
     private String output;
+
+    @Option(
+            names = {"--format", "-f"},
+            description = "Output format: markdown, plain, json (default: markdown)"
+    )
+    private String outputFormat = "markdown";
 
     // ==================== 内容包含选项 ====================
 
@@ -211,6 +223,66 @@ public class MarkItDownCommand implements Callable<Integer> {
     )
     private boolean showStats;
 
+    @Option(
+            names = {"--memory-limit"},
+            description = "Memory limit in MB for batch processing (default: auto-detect)"
+    )
+    private int memoryLimit = 0;
+
+    @Option(
+            names = {"--optimize-memory"},
+            description = "Enable memory optimization for large file processing"
+    )
+    private boolean optimizeMemory;
+
+    @Option(
+            names = {"--examples"},
+            description = "Show usage examples and exit"
+    )
+    private boolean showExamples;
+
+    @Option(
+            names = {"--generate-config"},
+            description = "Generate default configuration file"
+    )
+    private boolean generateConfig;
+
+    @Option(
+            names = {"--config-path"},
+            description = "Path to configuration file"
+    )
+    private String configPath;
+
+    @Option(
+            names = {"--validate-config"},
+            description = "Validate configuration file"
+    )
+    private boolean validateConfig;
+
+    @Option(
+            names = {"--show-config"},
+            description = "Show current configuration"
+    )
+    private boolean showConfig;
+
+    @Option(
+            names = {"--interactive", "-i"},
+            description = "Enable interactive mode with detailed feedback"
+    )
+    private boolean interactive;
+
+    @Option(
+            names = {"--recursive", "-r"},
+            description = "Recursively process files in directories"
+    )
+    private boolean recursive;
+
+    @Option(
+            names = {"--batch"},
+            description = "Batch process all supported files in directory"
+    )
+    private boolean batch;
+
     // ==================== MIME 类型选项（用于管道输入）====================
 
     @Option(
@@ -237,12 +309,52 @@ public class MarkItDownCommand implements Callable<Integer> {
         Instant startTime = Instant.now();
         stats = new PerformanceStats();
 
+        // 处理配置相关命令
+        if (generateConfig) {
+            return ConfigCommands.generateConfig(configPath);
+        }
+
+        if (validateConfig) {
+            return ConfigCommands.validateConfig(configPath);
+        }
+
+        if (showConfig) {
+            return ConfigCommands.showConfig(configPath);
+        }
+
+        // 内存优化设置
+        if (optimizeMemory) {
+            System.gc(); // 在开始处理前清理内存
+        }
+
+        // 显示使用示例
+        if (showExamples) {
+            System.out.println(UserMessageHelper.getUsageExamples());
+            return 0;
+        }
+
+        // 交互模式欢迎信息
+        if (interactive && !quiet) {
+            System.out.println("🚀 MarkItDown Java - 文档转换工具");
+            System.out.println("版本: 2.0.0 | 交互模式已启用\n");
+        }
+
         try {
             // Initialize engine
             engine = createEngine();
 
             // Configure options
             ConversionOptions options = createConversionOptions();
+
+            // 内存监控
+            Runtime runtime = Runtime.getRuntime();
+            long maxMemory = runtime.maxMemory();
+            long usedMemory = runtime.totalMemory() - runtime.freeMemory();
+            double memoryUsage = (double) usedMemory / maxMemory;
+
+            if (verbose && memoryUsage > 0.7) {
+                System.err.printf("Warning: High memory usage detected: %.1f%%%n", memoryUsage * 100);
+            }
 
             // Check for pipe input
             if (isPipeInput()) {
@@ -272,11 +384,23 @@ public class MarkItDownCommand implements Callable<Integer> {
             return result;
 
         } catch (Exception e) {
-            System.err.println("Fatal error: " + e.getMessage());
+            // 处理所有异常，提供用户友好的错误消息
+            if (!quiet) {
+                String errorMessage = UserMessageHelper.getUserFriendlyError(e);
+                System.err.println(errorMessage);
+            }
+
             if (verbose) {
+                System.err.println("\n🔍 详细错误信息:");
                 e.printStackTrace();
             }
-            return 2;
+
+            // 返回适当的退出代码
+            if (e instanceof ConversionException) {
+                return 1; // 转换错误
+            } else {
+                return 2; // 系统错误
+            }
         } finally {
             if (engine != null) {
                 engine.shutdown();
@@ -438,23 +562,44 @@ public class MarkItDownCommand implements Callable<Integer> {
         int successCount = 0;
         int errorCount = 0;
 
-        for (int i = 0; i < inputFiles.length; i++) {
-            String inputFile = inputFiles[i];
+        // First collect all files to process (including directories if recursive/batch)
+        List<String> allFiles = new ArrayList<>();
+        for (String inputFile : inputFiles) {
+            if (inputFile.contains("*") || inputFile.contains("?")) {
+                allFiles.addAll(expandWildcard(inputFile));
+            } else {
+                Path path = Paths.get(inputFile);
+                if (Files.isDirectory(path)) {
+                    if (recursive || batch) {
+                        allFiles.addAll(collectFilesFromDirectory(path, recursive));
+                    } else {
+                        if (!quiet) {
+                            System.err.println("Warning: " + inputFile + " is a directory. Use --recursive or --batch to process directories.");
+                        }
+                    }
+                } else {
+                    allFiles.add(inputFile);
+                }
+            }
+        }
+
+        if (allFiles.isEmpty()) {
+            System.err.println("No files to process.");
+            return 1;
+        }
+
+        // Process collected files
+        for (int i = 0; i < allFiles.size(); i++) {
+            String inputFile = allFiles.get(i);
 
             if (showProgress) {
-                showProgress(i + 1, inputFiles.length, inputFile);
+                showProgress(i + 1, allFiles.size(), inputFile);
             }
 
             try {
-                if (inputFile.contains("*") || inputFile.contains("?")) {
-                    int[] counts = processWildcard(inputFile, options);
-                    successCount += counts[0];
-                    errorCount += counts[1];
-                } else {
-                    processFile(inputFile, options);
-                    successCount++;
-                    stats.recordSuccess(inputFile);
-                }
+                processFile(inputFile, options);
+                successCount++;
+                stats.recordSuccess(inputFile);
             } catch (Exception e) {
                 errorCount++;
                 stats.recordError(inputFile);
@@ -471,7 +616,7 @@ public class MarkItDownCommand implements Callable<Integer> {
             System.err.println(); // 换行
         }
 
-        if (!quiet && inputFiles.length > 1) {
+        if (!quiet && allFiles.size() > 1) {
             System.err.printf("Conversion completed: %d successful, %d failed%n", successCount, errorCount);
         }
 
@@ -484,12 +629,23 @@ public class MarkItDownCommand implements Callable<Integer> {
     private int processFilesParallel(ConversionOptions options) {
         List<String> allFiles = new ArrayList<>();
 
-        // 收集所有文件
+        // 收集所有文件（包括目录处理）
         for (String inputFile : inputFiles) {
             if (inputFile.contains("*") || inputFile.contains("?")) {
                 allFiles.addAll(expandWildcard(inputFile));
             } else {
-                allFiles.add(inputFile);
+                Path path = Paths.get(inputFile);
+                if (Files.isDirectory(path)) {
+                    if (recursive || batch) {
+                        allFiles.addAll(collectFilesFromDirectory(path, recursive));
+                    } else {
+                        if (!quiet) {
+                            System.err.println("Warning: " + inputFile + " is a directory. Use --recursive or --batch to process directories.");
+                        }
+                    }
+                } else {
+                    allFiles.add(inputFile);
+                }
             }
         }
 
@@ -498,34 +654,54 @@ public class MarkItDownCommand implements Callable<Integer> {
             return 1;
         }
 
+        // 确定线程池大小
+        int poolSize = threads > 0 ? threads : Runtime.getRuntime().availableProcessors();
+        ExecutorService executor = Executors.newFixedThreadPool(poolSize);
+
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger errorCount = new AtomicInteger(0);
         AtomicInteger processed = new AtomicInteger(0);
 
-        // 并行处理
-        List<CompletableFuture<Void>> futures = allFiles.stream()
-                .map(inputFile -> CompletableFuture.runAsync(() -> {
-                    try {
-                        if (showProgress) {
-                            int current = processed.incrementAndGet();
-                            showProgress(current, allFiles.size(), inputFile);
-                        }
+        try {
+            // 使用自定义线程池进行并行处理
+            List<CompletableFuture<Void>> futures = allFiles.stream()
+                    .map(inputFile -> CompletableFuture.runAsync(() -> {
+                        try {
+                            if (showProgress) {
+                                int current = processed.incrementAndGet();
+                                showProgress(current, allFiles.size(), inputFile);
+                            }
 
-                        processFile(inputFile, options);
-                        successCount.incrementAndGet();
-                        stats.recordSuccess(inputFile);
-                    } catch (Exception e) {
-                        errorCount.incrementAndGet();
-                        stats.recordError(inputFile);
-                        if (!quiet) {
-                            System.err.println("Error processing " + inputFile + ": " + e.getMessage());
+                            processFile(inputFile, options);
+                            successCount.incrementAndGet();
+                            stats.recordSuccess(inputFile);
+                        } catch (Exception e) {
+                            errorCount.incrementAndGet();
+                            stats.recordError(inputFile);
+                            if (!quiet) {
+                                System.err.println("Error processing " + inputFile + ": " + e.getMessage());
+                            }
+                            if (verbose) {
+                                e.printStackTrace();
+                            }
                         }
-                    }
-                }))
-                .collect(java.util.stream.Collectors.toList());
+                    }, executor))
+                    .collect(java.util.stream.Collectors.toList());
 
-        // 等待所有任务完成
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            // 等待所有任务完成
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()])).join();
+
+        } finally {
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
 
         if (showProgress) {
             System.err.println();
@@ -601,6 +777,7 @@ public class MarkItDownCommand implements Callable<Integer> {
      * Creates and configures the MarkItDown engine.
      */
     private MarkItDownEngine createEngine() {
+        ConfigurationManager configManager = new ConfigurationManager();
         ConverterRegistry registry = new ConverterRegistry();
 
         // Register all converters
@@ -659,40 +836,72 @@ public class MarkItDownCommand implements Callable<Integer> {
     }
 
     /**
-     * Creates conversion options from command-line arguments.
+     * Creates conversion options from command-line arguments and configuration file.
      */
     private ConversionOptions createConversionOptions() {
         ConversionOptions.Builder builder = ConversionOptions.builder();
 
-        // Process boolean options with precedence
-        boolean incImages = this.includeImages != null ? this.includeImages : !noImages;
-        boolean incTables = this.includeTables != null ? this.includeTables : !noTables;
-        boolean incMetadata = this.includeMetadata != null ? this.includeMetadata : !noMetadata;
+        // Load configuration from file if available
+        ConfigurationManager configManager = new ConfigurationManager();
+
+        // Process boolean options with precedence: CLI args > config file > defaults
+        boolean incImages = this.includeImages != null ? this.includeImages :
+            (configManager.getBooleanProperty("content.include.images", !noImages));
+        boolean incTables = this.includeTables != null ? this.includeTables :
+            (configManager.getBooleanProperty("content.include.tables", !noTables));
+        boolean incMetadata = this.includeMetadata != null ? this.includeMetadata :
+            (configManager.getBooleanProperty("content.include.metadata", !noMetadata));
+
+        // OCR options with precedence
+        boolean useOcrConfig = this.useOcr || configManager.getBooleanProperty("ocr.enable", false);
+        String languageConfig = this.language != null ? this.language :
+            configManager.getProperty("ocr.language", "auto");
+
+        // Format options with precedence
+        String tableFormatConfig = this.tableFormat != null ? this.tableFormat :
+            configManager.getProperty("format.table", "github");
+        String imageFormatConfig = this.imageFormat != null ? this.imageFormat :
+            configManager.getProperty("format.image", "markdown");
 
         // 处理大文件选项
         long effectiveMaxFileSize = maxFileSize;
         if (largeFile) {
             effectiveMaxFileSize = 0; // 0 表示无限制
+        } else if (effectiveMaxFileSize == 0) {
+            // Use config file value if not set via CLI
+            effectiveMaxFileSize = configManager.getLongProperty("performance.max.file.size", 52428800);
         }
+
+        // Image output directory with precedence
+        String imageOutputDirConfig = this.imageOutputDir != null ? this.imageOutputDir :
+            configManager.getProperty("output.image.dir", "assets");
+
+        // Temp directory with precedence
+        String tempDirConfig = this.tempDir != null ? this.tempDir :
+            configManager.getProperty("output.temp.dir", System.getProperty("java.io.tmpdir"));
 
         builder.includeImages(incImages)
                .includeTables(incTables)
                .includeMetadata(incMetadata)
-               .useOcr(useOcr)
-               .language(language)
-               .tableFormat(tableFormat)
-               .imageFormat(imageFormat)
-               .imageOutputDir(imageOutputDir)
+               .useOcr(useOcrConfig)
+               .language(languageConfig)
+               .tableFormat(tableFormatConfig)
+               .imageFormat(imageFormatConfig)
+               .imageOutputDir(imageOutputDirConfig)
                .maxFileSize(effectiveMaxFileSize);
 
-        if (tempDir != null) {
-            builder.tempDirectory(Paths.get(tempDir));
+        if (tempDirConfig != null) {
+            builder.tempDirectory(Paths.get(tempDirConfig));
         }
 
         // 添加PDF密码到自定义选项
         if (pdfPassword != null && !pdfPassword.isEmpty()) {
             builder.customOption("pdfPassword", pdfPassword);
         }
+
+        // 添加Tesseract路径配置到自定义选项
+        builder.customOption("tesseractPath", configManager.getTesseractPath());
+        builder.customOption("tessdataPath", configManager.getTessdataPath());
 
         return builder.build();
     }
@@ -706,22 +915,46 @@ public class MarkItDownCommand implements Callable<Integer> {
         File inputFileObj = inputPath.toFile();
 
         if (!inputFileObj.exists()) {
+            if (interactive) {
+                System.err.println("❌ 文件不存在: " + inputFile);
+                System.err.println(UserMessageHelper.getFileTypeDetectionInfo(inputFile));
+            }
             throw new ConversionException("Input file does not exist: " + inputFile);
         }
 
         if (!inputFileObj.isFile()) {
+            if (interactive) {
+                System.err.println("❌ 不是文件: " + inputFile);
+            }
             throw new ConversionException("Input path is not a file: " + inputFile);
         }
 
         // Check if file type is supported
         if (!engine.isSupported(inputPath)) {
+            if (interactive) {
+                System.err.println("❌ 不支持的文件类型");
+                System.err.println(UserMessageHelper.getFileTypeDetectionInfo(inputFile));
+            }
             throw new ConversionException("Unsupported file type: " + inputFile);
+        }
+
+        // 交互模式显示处理信息
+        if (interactive && !quiet) {
+            System.out.println("📄 正在处理: " + inputFile);
+            System.out.println("   大小: " + formatFileSize(inputFileObj.length()));
         }
 
         // Determine output path for image extraction and file writing
         Path outputPath;
-        if (output != null) {
-            outputPath = determineOutputPath(inputPath);
+        String effectiveOutput = output;
+        if (effectiveOutput == null) {
+            // Check configuration file for default output directory
+            ConfigurationManager configManager = new ConfigurationManager();
+            effectiveOutput = configManager.getOutputDir();
+        }
+
+        if (effectiveOutput != null) {
+            outputPath = determineOutputPath(inputPath, effectiveOutput);
         } else {
             // Default to input filename with .md extension in same directory
             String fileName = inputPath.getFileName().toString();
@@ -744,6 +977,15 @@ public class MarkItDownCommand implements Callable<Integer> {
 
         // Convert the file
         ConversionResult result = engine.convert(inputPath, optionsWithPath);
+
+        // 交互模式显示成功信息
+        if (interactive && !quiet) {
+            long duration = java.time.Duration.between(startTime, Instant.now()).toMillis();
+            System.out.println("✅ 转换完成 (" + duration + "ms)");
+            if (outputPath != null) {
+                System.out.println("   输出: " + outputPath);
+            }
+        }
 
         // Determine output destination
         if (output == null && inputFiles.length == 1) {
@@ -796,30 +1038,33 @@ public class MarkItDownCommand implements Callable<Integer> {
     }
 
     /**
+     * 格式化文件大小显示
+     */
+    private String formatFileSize(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        } else if (bytes < 1024 * 1024) {
+            return String.format("%.1f KB", bytes / 1024.0);
+        } else if (bytes < 1024 * 1024 * 1024) {
+            return String.format("%.1f MB", bytes / (1024.0 * 1024));
+        } else {
+            return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
+        }
+    }
+
+    /**
      * Determines the output path based on input path and options.
      */
-    private Path determineOutputPath(Path inputPath) {
-        if (output != null) {
-            Path outputPath = Paths.get(output);
+    private Path determineOutputPath(Path inputPath, String outputPathStr) {
+        Path outputPath = Paths.get(outputPathStr);
 
-            // If output is a directory, use input filename with .md extension
-            if (Files.isDirectory(outputPath) || output.endsWith("/") || output.endsWith("\\")) {
-                String fileName = inputPath.getFileName().toString();
-                return outputPath.resolve(fileName + ".md");
-            }
-
-            return outputPath;
+        // If output is a directory, use input filename with .md extension
+        if (Files.isDirectory(outputPath) || outputPathStr.endsWith("/") || outputPathStr.endsWith("\\")) {
+            String fileName = inputPath.getFileName().toString();
+            return outputPath.resolve(fileName + ".md");
         }
 
-        // Default: same directory as input with .md extension appended to original filename
-        String fileName = inputPath.getFileName().toString();
-        Path parentPath = inputPath.getParent();
-
-        if (parentPath != null) {
-            return parentPath.resolve(fileName + ".md");
-        } else {
-            return Paths.get(fileName + ".md");
-        }
+        return outputPath;
     }
 
     /**
@@ -857,6 +1102,38 @@ public class MarkItDownCommand implements Callable<Integer> {
         }
 
         return fileName;
+    }
+
+    /**
+     * 从目录收集所有支持的文件
+     * @param directory 要扫描的目录
+     * @param recursive 是否递归扫描子目录
+     * @return 支持的文件路径列表
+     */
+    private List<String> collectFilesFromDirectory(Path directory, boolean recursive) {
+        List<String> files = new ArrayList<>();
+        try {
+            if (recursive) {
+                // 递归遍历目录
+                Files.walk(directory)
+                    .filter(Files::isRegularFile)
+                    .filter(engine::isSupported)
+                    .forEach(path -> files.add(path.toString()));
+            } else {
+                // 只处理当前目录
+                Files.list(directory)
+                    .filter(Files::isRegularFile)
+                    .filter(engine::isSupported)
+                    .forEach(path -> files.add(path.toString()));
+            }
+
+            if (!quiet && !files.isEmpty()) {
+                System.err.printf("Found %d supported file(s) in %s%n", files.size(), directory);
+            }
+        } catch (IOException e) {
+            System.err.println("Error scanning directory " + directory + ": " + e.getMessage());
+        }
+        return files;
     }
 
     public static void main(String[] args) {

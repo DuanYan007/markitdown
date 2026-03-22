@@ -157,6 +157,67 @@ Usage: markitdown [OPTIONS] INPUT_FILES...
   -h, --help              显示帮助
 ```
 
+### 配置文件系统
+
+Java 命令行工具支持 properties 格式的配置文件，可以预设常用参数和引擎路径：
+
+#### 生成配置文件
+
+```bash
+java -jar target/markitdown-java.jar --generate-config
+```
+
+这将在当前目录创建 `.markitdown.properties` 文件。
+
+#### 配置文件示例
+
+```properties
+# 引擎路径配置
+tesseract.path=O:\\tesserOCR
+tessdata.path=O:\\tesserOCR\\tessdata
+
+# 输出配置
+output.dir=./output
+output.image.dir=assets
+
+# 处理选项
+content.include.images=true
+content.include.tables=true
+ocr.enable=false
+ocr.language=auto
+
+# 性能配置
+performance.parallel=true
+performance.threads=0
+```
+
+#### 使用配置文件
+
+```bash
+# 直接使用配置文件中的设置
+java -jar target/markitdown-java.jar document.pdf
+
+# 命令行参数会覆盖配置文件设置
+java -jar target/markitdown-java.jar document.pdf --ocr --verbose
+
+# 查看当前生效的配置
+java -jar target/markitdown-java.jar --show-config
+
+# 验证配置文件
+java -jar target/markitdown-java.jar --validate-config
+```
+
+#### 配置优先级
+
+1. 命令行参数（最高优先级）
+2. 环境变量（如 `TESSERACT_PATH`, `MARKITDOWN_OUTPUT_DIR`）
+3. 配置文件
+4. 默认值（最低优先级）
+
+#### 详细文档
+
+完整的配置文件说明请参考：[java/CONFIGURATION_GUIDE.md](java/CONFIGURATION_GUIDE.md)
+
 ---
 
 ## 📚 支持格式总览

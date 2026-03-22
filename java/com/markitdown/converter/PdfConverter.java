@@ -104,8 +104,16 @@ public class PdfConverter implements DocumentConverter {
             textStripper.setSortByPosition(true);
             textStripper.setLineSeparator("\n");
 
-            // 提取所有页面的文本
-            String text = textStripper.getText(document);
+            // 内存优化：分页处理大文件
+            String text;
+            int pageCount = document.getNumberOfPages();
+            if (pageCount > 100 && options.getMaxFileSize() == 0) {
+                // 大文件分页处理以减少内存占用
+                text = extractTextInPages(document, textStripper, pageCount);
+            } else {
+                // 普通文件一次性提取
+                text = textStripper.getText(document);
+            }
 
             // 如果文本为空且启用了OCR,则对扫描PDF进行OCR识别
             if ((text == null || text.trim().isEmpty()) && options.isUseOcr()) {
@@ -138,8 +146,9 @@ public class PdfConverter implements DocumentConverter {
             StringBuilder ocrText = new StringBuilder();
             PDFRenderer renderer = new PDFRenderer(document);
 
-            // 创建OCR引擎
-            OcrEngine ocrEngine = new TesseractOcrEngine();
+            // 创建OCR引擎，使用配置文件中的路径
+            String tessdataPath = (String) options.getCustomOption("tessdataPath");
+            OcrEngine ocrEngine = tessdataPath != null ? new TesseractOcrEngine(tessdataPath) : new TesseractOcrEngine();
 
             for (int pageNum = 0; pageNum < document.getNumberOfPages(); pageNum++) {
                 logger.info("正在OCR识别第{}页...", pageNum + 1);
@@ -154,6 +163,9 @@ public class PdfConverter implements DocumentConverter {
 
                     // 执行OCR识别
                     String pageText = ocrEngine.extractText(tempImage);
+
+                    // 立即清理每个页面的OCR结果
+                    pageText = cleanupSinglePageText(pageText);
 
                     if (pageNum > 0) {
                         ocrText.append("\n\n");
@@ -172,6 +184,7 @@ public class PdfConverter implements DocumentConverter {
             }
 
             String result = ocrText.toString();
+
             if (result.trim().isEmpty()) {
                 return "*OCR识别未提取到文本内容。可能原因:\n\n" +
                        "1. PDF页面质量过低\n" +
@@ -187,6 +200,44 @@ public class PdfConverter implements DocumentConverter {
             return "*OCR处理失败: " + e.getMessage() + "\n\n" +
                    "*建议: 确保Tesseract正确安装并配置了中文语言包*";
         }
+    }
+
+    /**
+     * 分页提取PDF文本以减少内存占用
+     */
+    private String extractTextInPages(PDDocument document, PDFTextStripper textStripper, int pageCount) {
+        StringBuilder result = new StringBuilder();
+
+        try {
+            // 每次处理20页，平衡性能和内存
+            int batchSize = 20;
+            for (int startPage = 0; startPage < pageCount; startPage += batchSize) {
+                int endPage = Math.min(startPage + batchSize, pageCount);
+
+                // 设置提取范围（页码从1开始）
+                textStripper.setStartPage(startPage + 1);
+                textStripper.setEndPage(endPage);
+
+                String pageText = textStripper.getText(document);
+                if (pageText != null && !pageText.trim().isEmpty()) {
+                    result.append(pageText);
+                }
+
+                // 每50页清理一次内存
+                if (startPage % 50 == 0) {
+                    System.gc();
+                }
+            }
+        } catch (IOException e) {
+            logger.warn("分页提取失败，回退到一次性提取: {}", e.getMessage());
+            try {
+                return textStripper.getText(document);
+            } catch (IOException ex) {
+                return "";
+            }
+        }
+
+        return result.toString();
     }
 
     /**
@@ -595,5 +646,199 @@ public class PdfConverter implements DocumentConverter {
     @Override
     public String getName() {
         return "PdfConverter";
+    }
+
+    /**
+     * 清理单个页面的OCR文本
+     */
+    private String cleanupSinglePageText(String pageText) {
+        if (pageText == null || pageText.trim().isEmpty()) {
+            return pageText;
+        }
+
+        // 按行分割并去重
+        String[] lines = pageText.split("\\n");
+        List<String> uniqueLines = new ArrayList<>();
+        String lastLine = "";
+
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+
+            // 检查是否与上一行高度相似
+            if (!lastLine.isEmpty() && trimmed.length() > 8) {
+                double similarity = calculateSimilarity(trimmed, lastLine);
+                if (similarity > 0.80) {
+                    continue; // 跳过重复行
+                }
+            }
+
+            uniqueLines.add(line);
+            lastLine = trimmed;
+        }
+
+        return String.join("\n", uniqueLines);
+    }
+
+    /**
+     * 清理OCR识别的文本，去除重复和格式问题
+     */
+    private String cleanupOcrText(String ocrText) {
+        if (ocrText == null || ocrText.trim().isEmpty()) {
+            return ocrText;
+        }
+
+        // 先按页分割
+        String[] pages = ocrText.split("### 第\\d+页");
+        List<String> cleanedPages = new ArrayList<>();
+
+        for (String page : pages) {
+            if (page.trim().isEmpty()) continue;
+
+            // 按行处理
+            String[] lines = page.split("\\n");
+            List<String> cleanedLines = new ArrayList<>();
+            String lastLine = "";
+
+            for (String line : lines) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty()) {
+                    continue; // 跳过空行
+                }
+
+                // 跳过页面标题行
+                if (trimmed.startsWith("###")) {
+                    cleanedLines.add(line);
+                    continue;
+                }
+
+                // 检查是否与上一行高度相似（超过75%相似度就认为是重复）
+                if (!lastLine.isEmpty() && trimmed.length() > 10) {
+                    double similarity = calculateSimilarity(trimmed, lastLine);
+                    if (similarity > 0.75) {
+                        // 跳过高相似度的行
+                        continue;
+                    }
+                }
+
+                cleanedLines.add(line);
+                lastLine = trimmed;
+            }
+
+            if (!cleanedLines.isEmpty()) {
+                cleanedPages.add(String.join("\n", cleanedLines));
+            }
+        }
+
+        // 重新组合页面，添加页面标题
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < cleanedPages.size(); i++) {
+            if (i > 0) {
+                result.append("\n\n");
+            }
+            result.append("### 第").append(i + 1).append("页\n\n");
+            result.append(cleanedPages.get(i));
+        }
+
+        return result.toString();
+    }
+
+    /**
+     * 去除段落内的重复行
+     */
+    private String removeDuplicateLines(String paragraph) {
+        String[] lines = paragraph.split("\\n");
+        List<String> uniqueLines = new ArrayList<>();
+        Set<String> seenLines = new HashSet<>();
+
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty() && !seenLines.contains(trimmed)) {
+                uniqueLines.add(line);
+                seenLines.add(trimmed);
+            }
+        }
+
+        return String.join("\n", uniqueLines);
+    }
+
+    /**
+     * 去除过度重复的句子
+     */
+    private String removeRepeatedSentences(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+
+        // 按行分割，因为OCR通常按行识别
+        String[] lines = text.split("\\n");
+        List<String> result = new ArrayList<>();
+        String lastLine = "";
+        int repeatCount = 1;
+
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) {
+                result.add(line);
+                continue;
+            }
+
+            // 检查是否与上一行相同或高度相似
+            if (trimmed.length() > 10 && calculateSimilarity(trimmed, lastLine) > 0.85) {
+                repeatCount++;
+                // 只保留前2次重复
+                if (repeatCount <= 2) {
+                    result.add(line);
+                }
+            } else {
+                result.add(line);
+                lastLine = trimmed;
+                repeatCount = 1;
+            }
+        }
+
+        return String.join("\n", result);
+    }
+
+    /**
+     * 计算两个字符串的相似度（简单版本）
+     */
+    private double calculateSimilarity(String s1, String s2) {
+        if (s1 == null || s2 == null) return 0.0;
+        if (s1.equals(s2)) return 1.0;
+
+        int maxLen = Math.max(s1.length(), s2.length());
+        if (maxLen == 0) return 0.0;
+
+        // 简单的编辑距离近似
+        return (maxLen - levenshteinDistance(s1, s2)) / (double) maxLen;
+    }
+
+    /**
+     * 简单的编辑距离计算
+     */
+    private int levenshteinDistance(String s1, String s2) {
+        int[][] dp = new int[s1.length() + 1][s2.length() + 1];
+
+        for (int i = 0; i <= s1.length(); i++) {
+            dp[i][0] = i;
+        }
+        for (int j = 0; j <= s2.length(); j++) {
+            dp[0][j] = j;
+        }
+
+        for (int i = 1; i <= s1.length(); i++) {
+            for (int j = 1; j <= s2.length(); j++) {
+                int cost = s1.charAt(i - 1) == s2.charAt(j - 1) ? 0 : 1;
+                dp[i][j] = Math.min(
+                    Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1),
+                    dp[i - 1][j - 1] + cost
+                );
+            }
+        }
+
+        return dp[s1.length()][s2.length()];
     }
 }

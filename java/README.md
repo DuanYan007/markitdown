@@ -3,13 +3,29 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Java Version](https://img.shields.io/badge/java-17+-green)](https://www.oracle.com/java/)
 [![Maven](https://img.shields.io/badge/Maven-3.9+-red.svg)](https://maven.apache.org/)
-[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)](https://github.com/your-repo)
+[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)](https://github.com/DuanYan007/markitdown/releases)
+[![Tests](https://img.shields.io/badge/tests-103%2F103-brightgreen.svg)](https://github.com/DuanYan007/markitdown/tree/main/java#-测试与验证)
 
 > 🚀 企业级多格式文档转 Markdown 工具，经过全面测试验证，100% 测试通过率
 
 ## 📖 项目简介
 
 MarkItDown Java 是微软开源项目 [MarkItDown](https://github.com/microsoft/markitdown) 的 Java 重写版本，专注于将各种文档格式转换为 Markdown 格式。
+
+## 📑 目录
+
+- [✨ 核心特性](#-核心特性)
+- [🚀 快速开始](#-快速开始)
+- [📋 支持的文件格式](#-支持的文件格式)
+- [🛠️ 命令行选项](#️-命令行选项)
+- [💡 使用示例](#-使用示例)
+- [🔧 OCR 配置](#-ocr-配置)
+- [📦 项目架构](#-项目架构)
+- [🔍 高级特性](#-高级特性)
+- [🧪 测试与验证](#-测试与验证)
+- [🔧 扩展开发](#-扩展开发)
+- [🤝 贡献指南](#-贡献指南)
+- [🔗 相关资源](#-相关资源)
 
 
 ### ✨ 核心特性
@@ -44,39 +60,30 @@ MarkItDown Java 是微软开源项目 [MarkItDown](https://github.com/microsoft/
 
 ## 🚀 快速开始
 
+**📖 详细安装配置指南**: [INSTALLATION.md](INSTALLATION.md) - 完整的安装、配置和故障排除指南
+
 ### 环境要求
 
 - **Java**: JDK 17 或更高版本
-- **Tesseract OCR**: 可选，用于 OCR 功能
+- **操作系统**: Windows、Linux、macOS
 
-### 获取发布版本
-
-**markitdown4j.jar** 是预编译的可执行 JAR 包，可直接下载使用，无需编译。
+### 快速安装
 
 ```bash
-# 下载 markitdown4j.jar 后直接使用
-java -jar markitdown4j.jar document.pdf -o output.md
+# 1. 下载 markitdown4j.jar
+# 最新版本: https://github.com/DuanYan007/markitdown/releases/latest
+# 直接下载: https://github.com/DuanYan007/markitdown/releases/download/v0.0.2/markitdown4j.jar
 
-# 查看帮助信息
-java -jar markitdown4j.jar --help
-
-# 查看版本信息
+# 2. 验证安装
 java -jar markitdown4j.jar --version
+
+# 3. 开始使用
+java -jar markitdown4j.jar document.pdf -o output.md
 ```
 
-### 从源码构建（开发者）
+**📦 测试文件**: [test-files.zip](https://github.com/DuanYan007/markitdown/releases/download/v0.0.2-test/test-files.zip) - 包含103个测试文件，用于功能验证
 
-```bash
-# 克隆项目
-git clone <repository-url>
-cd markitdown/java
-
-# 构建项目
-mvn clean package -DskipTests
-
-# 生成的 JAR 文件
-target/markitdown4j.jar
-```
+详细的安装步骤、Java 配置、OCR 设置请参考 [INSTALLATION.md](INSTALLATION.md)
 
 ### 基础使用
 
@@ -84,7 +91,7 @@ target/markitdown4j.jar
 # 转换单个文件
 java -jar markitdown4j.jar document.pdf -o output.md
 
-# Word 文档转换（含图片提取）
+# Word 文档转换
 java -jar markitdown4j.jar report.docx -o report.md
 
 # Excel 表格转换
@@ -105,218 +112,70 @@ java -jar markitdown4j.jar data.xlsx -o data.md
 | **文本** | `.txt`, `.csv`, `.json`, `.xml` | `TextConverter` | 直接转换为 Markdown |
 | **压缩包** | `.zip` | `ZipConverter` | 递归处理压缩文件内容 |
 
-> **注意**: EPUB 和 Outlook MSG 格式当前版本不支持，已从测试套件中移除。
 
-## 🛠️ 命令行选项详解
+## 🛠️ 命令行选项
 
-### 基础选项
+**📖 完整命令行参数参考**: [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) - 包含所有命令参数的详细说明和示例
 
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `-h, --help` | 显示帮助信息 | - |
-| `-V, --version` | 显示版本信息 | - |
-| `-v, --verbose` | 详细输出模式 | 关闭 |
-| `-q, --quiet` | 静默模式（仅显示错误） | 关闭 |
-| `-o, --output <path>` | 指定输出文件或目录 | 标准输出 |
+### 快速参考
 
-### 内容控制选项
+```bash
+# 查看完整帮助
+java -jar markitdown4j.jar --help
 
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `--include-metadata` | 包含文档元数据 | true |
-| `--no-metadata` | 排除文档元数据 | - |
-| `--include-images` | 包含图片内容 | true |
-| `--no-images` | 排除图片内容 | - |
-| `--include-tables` | 包含表格内容 | true |
-| `--no-tables` | 排除表格内容 | - |
-| `--image-format <format>` | 图片格式 (markdown/html/base64) | markdown |
-| `--table-format <format>` | 表格格式 (github/markdown/pipe) | github |
+# 查看使用示例
+java -jar markitdown4j.jar --examples
 
-### OCR 选项
+# 查看版本信息
+java -jar markitdown4j.jar --version
+```
 
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `--ocr` | 启用 OCR 文字识别 | 关闭 |
-| `-l, --language <lang>` | OCR 语言设置 (auto/eng/chi_sim) | auto |
-| `--image-output-dir <dir>` | 提取图片的输出目录 | assets/ |
+### 主要命令类别
 
-### PDF 选项
+- **基础选项**: 帮助、版本、输出控制 (`-h`, `-V`, `-v`, `-q`, `-o`)
+- **内容控制**: 元数据、图片、表格包含/排除 (`--include-*`, `--no-*`)
+- **OCR 选项**: 文字识别、语言设置 (`--ocr`, `-l`)
+- **PDF 选项**: 加密文件、大文件处理 (`--pdf-password`, `--large-file`)
+- **性能选项**: 并行处理、内存优化 (`--parallel`, `--optimize-memory`)
+- **目录处理**: 递归、批量处理 (`--recursive`, `--batch`)
+- **用户体验**: 交互模式、输出格式 (`--interactive`, `--format`)
 
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `--pdf-password <password>` | 加密 PDF 密码 | - |
-| `--large-file` | 允许处理大文件（>50MB） | 关闭 |
-| `--max-file-size <bytes>` | 最大文件大小限制 | 50MB |
-
-### 性能选项
-
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `-p, --parallel` | 启用并行处理 | 关闭 |
-| `--threads <num>` | 线程数量 | CPU 核心数 |
-| `--progress` | 显示进度条 | 关闭 |
-| `--stats` | 显示性能统计 | 关闭 |
-| `--optimize-memory` | 启用内存优化 | 关闭 |
-| `--temp-dir <dir>` | 临时文件目录 | 系统临时目录 |
-
-### 目录处理选项
-
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `-r, --recursive` | 递归处理子目录 | 关闭 |
-| `--batch` | 批量处理目录中所有支持的文件 | 关闭 |
-
-### 用户体验选项
-
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `-i, --interactive` | 启用交互模式（详细反馈） | 关闭 |
-| `--examples` | 显示使用示例 | - |
-| `--format <fmt>` | 输出格式 (markdown/plain/json) | markdown |
+详细的参数说明、默认值和示例请参考 [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md)
 
 ## 💡 使用示例
 
-### 基础转换
+更多使用示例请参考 [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md)
 
 ```bash
 # PDF 转 Markdown
 java -jar markitdown4j.jar document.pdf -o document.md
 
-# Word 文档转换（含图片提取）
-java -jar markitdown4j.jar report.docx -o report.md
+# 图片 OCR 文字识别
+java -jar markitdown4j.jar image.png --ocr -l chi_sim -o result.md
 
-# Excel 表格转换
-java -jar markitdown4j.jar data.xlsx -o data.md
-```
+# 加密 PDF
+java -jar markitdown4j.jar secret.pdf --pdf-password=secret123 -o output.md
 
-### OCR 功能
+# 批量转换
+java -jar markitdown4j.jar docs/ --batch --progress -o output/
 
-```bash
-# 图片 OCR 文字识别（带自动文本清理）
-java -jar markitdown4j.jar image.png --ocr -o result.md
-
-# 扫描 PDF OCR 识别（智能去重）
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar scanned.pdf --ocr -o result.md
-
-# 指定 OCR 语言（简体中文）
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar chinese-image.png --ocr -l chi_sim -o result.md
-
-# 多格式图片批量 OCR
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar test/image/*.png --ocr --parallel -o output/
-```
-
-### 内容控制
-
-```bash
-# 不包含元数据
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar document.pdf --no-metadata -o clean.md
-
-# 不包含表格
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar data.xlsx --no-tables -o no-tables.md
-
-# 不包含图片（Word 文档）
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar doc.docx --no-images -o no-images.md
-
-# 组合选项
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar data.xlsx --no-metadata --no-tables -o minimal.md
-```
-
-### 高级选项（
-
-```bash
-# 处理加密 PDF
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar secret.pdf --pdf-password=secret123 -o output.md
-
-# 处理大文件（内存优化）
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar large.pdf --large-file --optimize-memory -o output.md
-
-# 并行处理多个文件（自定义线程池）
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar *.pdf --parallel --threads=8 -o output_dir/
-
-# 显示详细进度和统计信息
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar document.pdf --progress --stats -o output.md
-
-# 交互模式（用户友好反馈）
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar document.pdf --interactive -o output.md
-```
-
-### 批量处理
-
-```bash
-# 递归处理目录
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar docs/ --recursive -o output/
-
-# 批量处理目录中所有支持的文件
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar docs/ --batch --progress -o output/
-
-# 并行递归处理（高性能）
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar docs/ --recursive --parallel --threads=4 --stats
-
-# 智能错误处理和用户友好消息
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar *.pdf --interactive --verbose
-```
-
-### 新增功能
-
-```bash
-# 查看使用示例
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar --examples
-
-# 大PDF文件分页处理（自动优化）
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar huge.pdf --large-file --stats
-
-# Word文档图片提取测试
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar doc_with_images.docx -o output.md
-# 自动生成：output.md + assets/output_image_0.png
-
-# 管道输入（保持兼容）
-cat document.pdf | java -jar markitdown-java-1.0.0.SNAPSHOT.jar > document.md
+# 并行处理
+java -jar markitdown4j.jar *.pdf --parallel --threads 4 -o output/
 ```
 
 ## 🔧 OCR 配置
 
-### Tesseract 安装
+**📖 详细安装配置指南**: [INSTALLATION.md](INSTALLATION.md#ocr-配置可选)
 
-#### Windows
-```bash
-# 下载 Tesseract 安装包
-# https://github.com/UB-Mannheim/tesseract/wiki
+OCR 功能需要安装 Tesseract OCR 引擎和相应的语言包。
 
-```
+- **Windows 下载**: https://github.com/UB-Mannheim/tesseract/wiki
+- **Linux 安装**: `sudo apt-get install tesseract-ocr tesseract-ocr-chi-sim`
+- **macOS 安装**: `brew install tesseract tesseract-lang`
 
-#### Linux
-```bash
-# Ubuntu/Debian
-sudo apt-get update
-sudo apt-get install tesseract-ocr
+支持的语言：英语、简体中文、繁体中文、日语、韩语、法语、德语等。
 
-# 安装中文语言包
-sudo apt-get install tesseract-ocr-chi-sim tesseract-ocr-chi-tra
-
-# 验证安装
-tesseract --version
-```
-
-#### macOS
-```bash
-# 使用 Homebrew
-brew install tesseract
-
-# 安装中文语言包
-brew install tesseract-lang
-```
-
-### 语言包配置
-
-| 语言 | 语言代码 | 语言包文件 | 支持状态 |
-|------|----------|------------|----------|
-| 英语 | `eng` | `eng.traineddata` | ✅ 完全支持 |
-| 简体中文 | `chi_sim` | `chi_sim.traineddata` | ✅ 完全支持 |
-| 繁体中文 | `chi_tra` | `chi_tra.traineddata` | ✅ 完全支持 |
-| 日语 | `jpn` | `jpn.traineddata` | ✅ 完全支持 |
-| 韩语 | `kor` | `kor.traineddata` | ✅ 完全支持 |
-| 法语 | `fra` | `fra.traineddata` | ✅ 完全支持 |
-| 德语 | `deu` | `deu.traineddata` | ✅ 完全支持 |
+完整的安装步骤、语言包下载、配置文件设置和故障排除，请参考 [INSTALLATION.md](INSTALLATION.md#ocr-配置可选)
 
 ## 📦 项目架构
 
@@ -367,48 +226,26 @@ com.markitdown
 
 ## 🔍 高级特性
 
-### 图片提取功能
+### 图片提取
 
-当转换包含图片的 Word 文档时，系统会：
-
-1. **自动提取图片**: 从文档中提取所有嵌入的图片
-2. **保存到指定目录**: 默认保存到 `assets/` 目录
-3. **生成 Markdown 引用**: 在适当位置插入标准图片引用
+自动提取文档中的嵌入图片并保存到指定目录：
 
 ```bash
-# 转换包含图片的 Word 文档
 java -jar markitdown4j.jar doc_with_images.docx -o output.md
-
-# 生成的文件结构
-output.md                    # Markdown 文档
-assets/                      # 图片资源目录
-  └── output_image_0.png     # 提取的图片
-  └── output_image_1.jpg     # 提取的图片
+# 生成: output.md + assets/output_image_0.png
 ```
 
 ### 性能优化
 
-#### 并行处理
 ```bash
-# 使用所有 CPU 核心并行处理
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar *.pdf --parallel -o output/
+# 并行处理
+java -jar markitdown4j.jar *.pdf --parallel --threads 4
 
-# 性能提升示例（100个PDF文件）
-# 单线程: 200秒
-# 4核心: 60秒
-# 8核心: 35秒
-```
+# 内存管理
+java -Xmx2g -jar markitdown4j.jar large.pdf --optimize-memory
 
-#### 内存管理
-```bash
-# 设置 JVM 内存参数处理大文件
-java -Xmx4g -Xms2g -jar markitdown-java-1.0.0.SNAPSHOT.jar large_file.pdf
-```
-
-#### 进度监控
-```bash
-# 显示详细进度和统计信息
-java -jar markitdown-java-1.0.0.SNAPSHOT.jar document.pdf --progress --stats -o output.md
+# 进度监控
+java -jar markitdown4j.jar document.pdf --progress --stats
 ```
 
 
@@ -549,23 +386,53 @@ mvn clean install
 
 ## 🔗 相关资源
 
-### 官方资源
+### 项目地址
+- **GitHub 仓库**: [https://github.com/DuanYan007/markitdown](https://github.com/DuanYan007/markitdown)
+- **问题反馈**: [GitHub Issues](https://github.com/DuanYan007/markitdown/issues)
+- **功能建议**: [GitHub Discussions](https://github.com/DuanYan007/markitdown/discussions)
+
+### 下载发布版
+- **最新版本 (v0.0.2)**: [GitHub Releases](https://github.com/DuanYan007/markitdown/releases/tag/v0.0.2)
+- **markitdown4j.jar**: [直接下载](https://github.com/DuanYan007/markitdown/releases/download/v0.0.2/markitdown4j.jar)
+- **test-files.zip**: [直接下载](https://github.com/DuanYan007/markitdown/releases/download/v0.0.2-test/test-files.zip) (测试文件包)
+
+### 测试文件
+- **测试文件目录**: `../test/` (103个测试文件)
+- **测试说明**: [TEST_FILES.md](TEST_FILES.md)
+
+### 依赖项目
 - [Microsoft MarkItDown](https://github.com/microsoft/markitdown) - 原始 Python 版本
 - [Apache POI](https://poi.apache.org/) - Microsoft Office 文档处理
 - [Apache PDFBox](https://pdfbox.apache.org/) - PDF 文档处理
 - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) - OCR 引擎
 - [Tess4J](https://github.com/tesseract-ocr/tess4j) - Tesseract Java 包装器
+- [Picocli](https://picocli.info/) - 命令行框架
 
-### 社区资源
-- [Picocli Documentation](https://picocli.info/) - 命令行框架
-- [SLF4J Logging](https://www.slf4j.org/) - 日志框架
-- [Maven Guide](https://maven.apache.org/guide/) - 构建工具指南
+## 👨‍💻 作者
 
-## 📞 联系方式
+**DuanYan** - [GitHub](https://github.com/DuanYan007)
 
-- **问题反馈**: [GitHub Issues](https://github.com/your-repo/issues)
-- **功能建议**: [GitHub Discussions](https://github.com/your-repo/discussions)
-- **安全问题**: security@example.com
+## 📄 许可证
+
+本项目基于原 Microsoft MarkItDown 项目，遵循相同的 [MIT 开源许可证](LICENSE)。
 
 ---
 
+**版本**: v0.0.2 (Latest Release)
+**最后更新**: 2026-03-23
+**测试状态**: ✅ 100% 通过 (103/103 测试用例)
+**发布包**: [markitdown4j.jar](https://github.com/DuanYan007/markitdown/releases/download/v0.0.2/markitdown4j.jar)
+
+## 📚 相关文档
+
+- **[INSTALLATION.md](INSTALLATION.md)** - 安装与配置完整指南
+- **[COMMAND_REFERENCE.md](COMMAND_REFERENCE.md)** - 命令行参数完整参考
+- **[TEST_FILES.md](TEST_FILES.md)** - 测试文件详细清单
+
+## 🔗 快速链接
+
+- **下载主程序**: [markitdown4j.jar (v0.0.2)](https://github.com/DuanYan007/markitdown/releases/download/v0.0.2/markitdown4j.jar)
+- **下载测试文件**: [test-files.zip](https://github.com/DuanYan007/markitdown/releases/download/v0.0.2-test/test-files.zip)
+- **查看所有Release**: [GitHub Releases](https://github.com/DuanYan007/markitdown/releases)
+
+---

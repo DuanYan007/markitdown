@@ -131,18 +131,31 @@ python app.py
 
 轻量级命令行工具，适合服务器环境和批量处理。
 
+### 📦 下载发布版本
+
+**最新版本 v0.0.2** - 已通过 103 个测试用例验证
+
+```bash
+# 下载主程序
+wget https://github.com/DuanYan007/markitdown/releases/download/v0.0.2/markitdown4j.jar
+
+# 下载测试文件包（可选）
+wget https://github.com/DuanYan007/markitdown/releases/download/v0.0.2-test/test-files.zip
+```
+
+或访问 [GitHub Releases](https://github.com/DuanYan007/markitdown/releases) 查看所有版本。
+
 ### 快速开始
 
 ```bash
-# 1. 编译打包
-cd java
-mvn clean package -DskipTests
+# 运行
+java -jar markitdown4j.jar document.docx -o output.md
 
-# 2. 运行
-java -jar target/markitdown-java.jar document.docx -o output.md
+# 批量转换
+java -jar markitdown4j.jar *.docx
 
-# 3. 批量转换
-java -jar target/markitdown-java.jar *.docx
+# 查看帮助
+java -jar markitdown4j.jar --help
 ```
 
 ### 命令行选项

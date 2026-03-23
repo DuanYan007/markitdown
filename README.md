@@ -237,18 +237,18 @@ java -jar target/markitdown-java.jar --validate-config
 
 | 格式类别 | 扩展名 | MCP | Web | Java |
 |---------|--------|-----|-----|------|
-| **PDF** | .pdf | ✅ | ✅ | ⚠️ |
+| **PDF** | .pdf | ✅ | ✅ | ✅ |
 | **Word** | .doc, .docx | ✅ | ✅ | ✅ |
 | **Excel** | .xls, .xlsx | ✅ | ✅ | ✅ |
 | **PowerPoint** | .ppt, .pptx | ✅ | ✅ | ✅ |
-| **图片** | .jpg, .png, .gif, .bmp, .tiff, .webp | ✅ | ✅ | ❌ |
+| **图片** | .jpg, .png, .gif, .bmp, .tiff, .webp | ✅ | ✅ | ✅ |
 | **HTML** | .html, .htm | ✅ | ✅ | ✅ |
 | **CSV** | .csv | ✅ | ✅ | ✅ |
 | **音频** | .mp3, .wav, .ogg, .flac, .m4a | ❌ | ✅ | ✅ |
 | **视频** | .mp4, .avi, .mov, .mkv | ❌ | ✅ | ❌ |
 | **JSON/XML** | .json, .xml | ❌ | ✅ | ✅ |
 | **文本** | .txt, .log, .md | ✅ | ✅ | ✅ |
-| **ZIP** | .zip | ❌ | ✅ | ❌ |
+| **ZIP** | .zip | ❌ | ✅ | ✅ |
 
 > ✅ 完整支持 | ⚠️ 基础支持 | ❌ 不支持
 

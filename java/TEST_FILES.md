@@ -1,5 +1,9 @@
 # MarkItDown Java 测试文件清单
 
+> 📦 **测试文件下载**: [test-files.zip (v0.0.2-test)](https://github.com/DuanYan007/markitdown/releases/download/v0.0.2-test/test-files.zip)
+>
+> 包含 103 个测试文件，涵盖所有支持格式的测试场景
+
 ## 📋 测试状态说明
 
 ```
@@ -277,4 +281,8 @@ markitdown/
 
 ---
 
-**最后更新**: 2026-03-23 00:15
+**版本**: v0.0.2
+**最后更新**: 2026-03-23
+**测试状态**: ✅ 100% 通过 (103/103 测试用例)
+**发布包**: [markitdown4j.jar](https://github.com/DuanYan007/markitdown/releases/download/v0.0.2/markitdown4j.jar)
+**测试文件**: [test-files.zip](https://github.com/DuanYan007/markitdown/releases/download/v0.0.2-test/test-files.zip)

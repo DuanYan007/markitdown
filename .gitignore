@@ -96,6 +96,7 @@ tessdata/
 # Test files and directories
 test/
 test-target/
+test-dest/
 
 # Temporary documentation
 PDF_FIX_REPORT.md

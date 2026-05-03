@@ -91,6 +91,53 @@ Current practical options:
 - `paddleocr` for remote structured OCR
 - `http` for custom remote OCR integrations
 
+## Testing and Validation
+
+The project currently validates behavior at three levels:
+
+### 1. Automated tests
+
+The `mvn test` suite currently covers:
+
+- Profile build and naming checks
+- OCR engine factory selection
+- PaddleOCR response parsing
+- Streaming text conversion
+- ZIP delegation and nested conversion behavior
+
+Run:
+
+```bash
+mvn test
+```
+
+### 2. Sample file coverage
+
+The [`test/`](test/README.md) directory contains a large set of sample files covering real-world formats and edge cases, including:
+
+- PDF
+- Word
+- Excel
+- PowerPoint
+- Image OCR
+- Audio metadata
+- HTML
+- JSON / XML / CSV / TXT
+- ZIP archives and nested archives
+- Large files, empty files, encrypted files, and multilingual files
+
+### 3. Release smoke validation
+
+Before `v0.0.3`, the following key paths were exercised in real runs:
+
+- `lite` basic text conversion
+- `win64 + tess4j` OCR
+- `linux64 + tesseract-cli` OCR
+- `lite + paddleocr` remote OCR
+- PDF / DOCX / XLSX / HTML / ZIP / audio metadata conversion
+
+For concrete examples, see [`test/README.md`](test/README.md).
+
 ## Documentation
 
 - [Java CLI Guide (Chinese)](java/README.md)

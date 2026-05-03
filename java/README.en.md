@@ -128,6 +128,50 @@ java -jar target/markitdown4j-0.0.3-lite.jar test/basic.docx -o out/basic.md
 java -jar target/markitdown4j-0.0.3-lite.jar test --batch -o out/
 ```
 
+## Testing
+
+The project is not documented-only; it is validated through automated tests, sample files, and release smoke runs.
+
+### Automated tests
+
+The current `mvn test` suite covers:
+
+- `ProfileConfigurationTest`
+- `OcrEngineFactoryTest`
+- `PaddleOcrEngineTest`
+- `TextConverterStreamingTest`
+- `ZipConverterTest`
+
+Run:
+
+```bash
+mvn test
+```
+
+### Sample file suite
+
+The [`../test/`](../test/README.md) directory contains a large set of real sample files used for regression and manual verification, covering:
+
+- PDF, Word, Excel, PowerPoint
+- Image OCR
+- HTML
+- Text, JSON, XML, CSV
+- ZIP and nested ZIP archives
+- Audio metadata
+- Multilingual, empty, large, and encrypted file scenarios
+
+### Practical smoke validation
+
+The current release has been exercised through these real-world paths:
+
+- `lite` basic conversion
+- `win64 + tess4j`
+- `linux64 + tesseract-cli`
+- `lite + paddleocr`
+- PDF / DOCX / XLSX / HTML / ZIP / audio metadata conversion
+
+See [`../test/README.md`](../test/README.md) for more sample-oriented guidance.
+
 ## Documentation
 
 - [Command Reference](COMMAND_REFERENCE.md)

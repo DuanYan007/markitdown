@@ -128,6 +128,50 @@ java -jar target/markitdown4j-0.0.3-lite.jar test/basic.docx -o out/basic.md
 java -jar target/markitdown4j-0.0.3-lite.jar test --batch -o out/
 ```
 
+## 测试
+
+当前项目不是只靠说明文档验证，而是同时保留了自动化测试、样例文件集和发布前集成验证。
+
+### 自动化测试
+
+当前 `mvn test` 已覆盖：
+
+- `ProfileConfigurationTest`
+- `OcrEngineFactoryTest`
+- `PaddleOcrEngineTest`
+- `TextConverterStreamingTest`
+- `ZipConverterTest`
+
+执行方式：
+
+```bash
+mvn test
+```
+
+### 样例文件集
+
+[`../test/`](../test/README.md) 目录保留了大量真实样例文件，用于回归和手工验证，覆盖：
+
+- PDF、Word、Excel、PowerPoint
+- 图片 OCR
+- HTML
+- 文本、JSON、XML、CSV
+- ZIP 与嵌套 ZIP
+- 音频元数据
+- 多语言、空文件、大文件、加密文件等场景
+
+### 典型集成验证
+
+当前版本已经实测过以下关键链路：
+
+- `lite` 基础转换
+- `win64 + tess4j`
+- `linux64 + tesseract-cli`
+- `lite + paddleocr`
+- PDF / DOCX / XLSX / HTML / ZIP / 音频元数据转换
+
+更详细的样例说明和建议命令见 [`../test/README.md`](../test/README.md)。
+
 ## 文档
 
 - [命令参考](COMMAND_REFERENCE.md)

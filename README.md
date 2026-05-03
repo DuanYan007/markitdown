@@ -91,6 +91,53 @@ ocr.poll.interval=5000
 - `paddleocr`：适合远程结构化 OCR
 - `http`：适合接自定义远程 OCR 服务
 
+## 测试与验证
+
+项目当前的测试分为三层：
+
+### 1. 自动化测试
+
+当前已纳入 `mvn test` 的测试包括：
+
+- Profile 构建与命名验证
+- OCR 工厂选择逻辑
+- PaddleOCR 结果解析
+- 文本流式转换
+- ZIP 内部委托转换
+
+可直接执行：
+
+```bash
+mvn test
+```
+
+### 2. 样例文件集验证
+
+仓库中的 [`test/`](test/README.md) 目录保留了大量样例文件，用于覆盖实际格式和边界场景，包括：
+
+- PDF
+- Word
+- Excel
+- PowerPoint
+- 图片 OCR
+- 音频元数据
+- HTML
+- JSON / XML / CSV / TXT
+- ZIP 归档和嵌套归档
+- 大文件、空文件、加密文件、多语言文件
+
+### 3. 发布前集成验证
+
+在本次 `v0.0.3` 发布前，已经实际验证过这些关键路径：
+
+- `lite` 基础文本转换
+- `win64 + tess4j` OCR
+- `linux64 + tesseract-cli` OCR
+- `lite + paddleocr` 远程 OCR
+- PDF / DOCX / XLSX / HTML / ZIP / 音频元数据转换
+
+如果你想快速复现，建议先看 [`test/README.md`](test/README.md)。
+
 ## 文档
 
 - [Java CLI 中文文档](java/README.md)

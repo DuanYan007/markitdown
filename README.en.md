@@ -113,7 +113,9 @@ mvn test
 
 ### 2. Sample file coverage
 
-The [`test/`](test/README.md) directory contains a large set of sample files covering real-world formats and edge cases, including:
+The repository includes [`test/test.zip`](test/test.zip), which is the full packaged test dataset. It currently contains about 104 files and serves as the main regression, compatibility, and pre-release manual verification asset.
+
+The extracted [`test/`](test/README.md) directory is provided for browsing and running file-level verification commands. It covers:
 
 - PDF
 - Word
@@ -136,7 +138,10 @@ Before `v0.0.3`, the following key paths were exercised in real runs:
 - `lite + paddleocr` remote OCR
 - PDF / DOCX / XLSX / HTML / ZIP / audio metadata conversion
 
-For concrete examples, see [`test/README.md`](test/README.md).
+For concrete examples, start with:
+
+- [`test/test.zip`](test/test.zip)
+- [`test/README.md`](test/README.md)
 
 ## Documentation
 

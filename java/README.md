@@ -150,7 +150,9 @@ mvn test
 
 ### 样例文件集
 
-[`../test/`](../test/README.md) 目录保留了大量真实样例文件，用于回归和手工验证，覆盖：
+[`../test/test.zip`](../test/test.zip) 是完整测试文件包，当前包含约 104 个测试文件。
+
+解压后的 [`../test/`](../test/README.md) 目录用于回归和手工验证，覆盖：
 
 - PDF、Word、Excel、PowerPoint
 - 图片 OCR
@@ -170,7 +172,10 @@ mvn test
 - `lite + paddleocr`
 - PDF / DOCX / XLSX / HTML / ZIP / 音频元数据转换
 
-更详细的样例说明和建议命令见 [`../test/README.md`](../test/README.md)。
+更详细的样例说明和建议命令见：
+
+- [`../test/test.zip`](../test/test.zip)
+- [`../test/README.md`](../test/README.md)
 
 ## 文档
 

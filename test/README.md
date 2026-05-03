@@ -1,10 +1,18 @@
-# MarkItDown Test Files
+# MarkItDown Test Dataset
 
-This directory contains the sample files used for regression, format verification, OCR validation, and release smoke testing.
+The primary test asset for this repository is [`test.zip`](test.zip).
 
-## Coverage Summary
+It is not a placeholder archive. It is the packaged verification dataset used for regression checks, format coverage review, OCR validation, and release smoke testing.
 
-The current sample set covers:
+## Dataset Status
+
+- Main packaged dataset: [`test.zip`](test.zip)
+- Current file count: about 104 files
+- Scope: format coverage, edge cases, OCR, archives, large files, multilingual files
+
+## What `test.zip` Contains
+
+The archive currently includes representative files for:
 
 - PDF
 - Word
@@ -44,6 +52,13 @@ Run them with:
 ```bash
 mvn test
 ```
+
+## Manual Verification Workflow
+
+You can either:
+
+1. Use the extracted files already present in `test/`
+2. Re-extract `test.zip` into a clean directory and run the same commands
 
 ## Manual Verification Examples
 

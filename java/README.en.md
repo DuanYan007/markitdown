@@ -150,7 +150,9 @@ mvn test
 
 ### Sample file suite
 
-The [`../test/`](../test/README.md) directory contains a large set of real sample files used for regression and manual verification, covering:
+[`../test/test.zip`](../test/test.zip) is the full packaged test dataset and currently contains about 104 test files.
+
+The extracted [`../test/`](../test/README.md) directory is used for regression and manual verification, covering:
 
 - PDF, Word, Excel, PowerPoint
 - Image OCR
@@ -170,7 +172,10 @@ The current release has been exercised through these real-world paths:
 - `lite + paddleocr`
 - PDF / DOCX / XLSX / HTML / ZIP / audio metadata conversion
 
-See [`../test/README.md`](../test/README.md) for more sample-oriented guidance.
+For more sample-oriented guidance, see:
+
+- [`../test/test.zip`](../test/test.zip)
+- [`../test/README.md`](../test/README.md)
 
 ## Documentation
 

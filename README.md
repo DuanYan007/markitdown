@@ -113,7 +113,9 @@ mvn test
 
 ### 2. 样例文件集验证
 
-仓库中的 [`test/`](test/README.md) 目录保留了大量样例文件，用于覆盖实际格式和边界场景，包括：
+仓库中的 [`test/test.zip`](test/test.zip) 是完整测试文件包，当前包含约 104 个测试文件，是回归、兼容性验证和 release 前手工检查的核心测试资产。
+
+解压后的 [`test/`](test/README.md) 目录用于浏览和按文件执行验证命令，覆盖：
 
 - PDF
 - Word
@@ -136,7 +138,10 @@ mvn test
 - `lite + paddleocr` 远程 OCR
 - PDF / DOCX / XLSX / HTML / ZIP / 音频元数据转换
 
-如果你想快速复现，建议先看 [`test/README.md`](test/README.md)。
+如果你想快速复现，建议优先查看：
+
+- [`test/test.zip`](test/test.zip)
+- [`test/README.md`](test/README.md)
 
 ## 文档
 

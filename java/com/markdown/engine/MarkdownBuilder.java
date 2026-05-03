@@ -5,6 +5,7 @@ import com.markdown.engine.context.RenderContext;
 
 import java.util.Collection;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -20,7 +21,7 @@ import java.util.Map;
 public class MarkdownBuilder {
 
     private final StringBuilder content;
-    private static RenderContext context;
+    private final RenderContext context;
 
     //构造函数
     public MarkdownBuilder() {
@@ -400,13 +401,13 @@ public class MarkdownBuilder {
     // 文件元数据转换
     public MarkdownBuilder header(Map<String, Object> metadata) {
 
-        this.append(heading(escapeMarkdown(metadata.get("文件名").toString()), 1));
-        this.append(heading("文件信息", 2));
+        this.append(heading(escapeMarkdown(resolveDocumentTitle(metadata)), 1));
+        this.append(heading("Document Information", 2));
         for (Map.Entry<String, Object> entry : metadata.entrySet()) {
             if (entry.getValue() != null) {
                 String key = formatMetadataKey(entry.getKey());
                 String value = entry.getValue().toString();
-                text("- **").text(key).text(": ** ").text(value).newline();
+                raw("- **" + key + ":** " + value).newline();
             }
         }
         newline();
@@ -484,13 +485,57 @@ public class MarkdownBuilder {
      * @brief 格式化元数据键名
      * @details 将驼峰命名转换为可读格式
      */
-    private String formatMetadataKey(String key) {
+    public static String prettifyMetadataKey(String key) {
         if (key == null) {
             return "";
         }
-        return key.replaceAll("([a-z])([A-Z])", "$1 $2")
-                .replaceAll("^([a-z])", String.valueOf(Character.toUpperCase(key.charAt(0))))
-                .toLowerCase();
+
+        String trimmed = key.trim();
+        Map<String, String> aliases = new LinkedHashMap<>();
+        aliases.put("文件名", "File Name");
+        aliases.put("文件大小", "File Size");
+        aliases.put("文件类型", "File Type");
+        aliases.put("转换时刻", "Converted At");
+        aliases.put("宽度", "Width");
+        aliases.put("高度", "Height");
+        aliases.put("格式", "Format");
+        aliases.put("颜色类型", "Color Type");
+        aliases.put("页数", "Pages");
+        aliases.put("标题", "Title");
+        aliases.put("作者", "Author");
+        aliases.put("主题", "Subject");
+        aliases.put("创建工具", "Creator");
+        aliases.put("pdf生成器", "PDF Producer");
+        aliases.put("生产者", "Producer");
+        aliases.put("行数", "Line Count");
+        aliases.put("行数量", "Line Count");
+        aliases.put("字符数量", "Character Count");
+        aliases.put("单词数", "Word Count");
+        aliases.put("单词数量", "Word Count");
+        aliases.put("工作表数量", "Sheet Count");
+        aliases.put("幻灯片数量", "Slide Count");
+        aliases.put("幻灯片宽度", "Slide Width");
+        aliases.put("幻灯片高度", "Slide Height");
+        aliases.put("压缩包条目数", "Archive Entry Count");
+
+        String alias = aliases.get(trimmed);
+        if (alias != null) {
+            return alias;
+        }
+
+        String spaced = trimmed.replaceAll("([a-z0-9])([A-Z])", "$1 $2")
+                .replace('_', ' ')
+                .replace('-', ' ')
+                .trim();
+        if (spaced.isEmpty()) {
+            return "";
+        }
+
+        return Character.toUpperCase(spaced.charAt(0)) + spaced.substring(1);
+    }
+
+    private String formatMetadataKey(String key) {
+        return prettifyMetadataKey(key);
     }
 
     /**
@@ -521,6 +566,34 @@ public class MarkdownBuilder {
         }
 
         return value.toString();
+    }
+
+    private String resolveDocumentTitle(Map<String, Object> metadata) {
+        if (metadata == null || metadata.isEmpty()) {
+            return "Document";
+        }
+
+        for (Map.Entry<String, Object> entry : metadata.entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            if ("File Name".equals(prettifyMetadataKey(entry.getKey()))) {
+                String value = String.valueOf(entry.getValue()).trim();
+                if (!value.isEmpty()) {
+                    return value;
+                }
+            }
+        }
+
+        Object title = metadata.get("title");
+        if (title != null) {
+            String value = String.valueOf(title).trim();
+            if (!value.isEmpty()) {
+                return value;
+            }
+        }
+
+        return "Document";
     }
 
     // 列表标记符号

@@ -1,18 +1,9 @@
 package com.markitdown;
 
-import com.markitdown.api.ConversionResult;
-import com.markitdown.api.DocumentConverter;
 import com.markitdown.cli.MarkItDownCommand;
-import com.markitdown.config.ConversionOptions;
-import com.markitdown.converter.*;
-import com.markitdown.core.ConverterRegistry;
 import com.markitdown.core.MarkItDownEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.InputStream;
-import java.util.Collections;
-import java.util.Optional;
 
 /**
  * @class MarkItDownApplication
@@ -47,71 +38,6 @@ public class MarkItDownApplication {
      * @return MarkItDownEngine 配置完成的引擎实例
      */
     public static MarkItDownEngine createEngine() {
-        ConverterRegistry registry = new ConverterRegistry();
-
-        // PDF 转换器
-        registry.registerConverter(new PdfConverter());
-
-        // Word 转换器（DOCX 和 DOC）
-        registry.registerConverter(new DocxConverter());
-        registry.registerConverter(new DocConverter());
-
-        // PowerPoint 转换器（PPTX 和 PPT）
-        registry.registerConverter(new PptxConverter());
-        registry.registerConverter(new PptConverter());
-
-        // Excel 转换器（XLSX 和 XLS）
-        registry.registerConverter(new XlsxConverter());
-        registry.registerConverter(new XlsConverter());
-
-        // Web 和文本格式转换器
-        registry.registerConverter(new HtmlConverter());
-        registry.registerConverter(new TextConverter());
-
-        // 媒体转换器
-        registry.registerConverter(new ImageConverter());
-        registry.registerConverter(new AudioConverter());
-
-        // ZIP 压缩包转换器
-        ZipConverter zipConverter = new ZipConverter();
-        zipConverter.setDelegate(createZipDelegate(registry));
-        registry.registerConverter(zipConverter);
-
-        return new MarkItDownEngine(registry);
-    }
-
-    /**
-     * 创建 ZIP 转换器的委托处理器
-     */
-    private static ZipConverter.DocumentConverterDelegate createZipDelegate(ConverterRegistry registry) {
-        return new ZipConverter.DocumentConverterDelegate() {
-            @Override
-            public ConversionResult convert(InputStream inputStream, String mimeType, ConversionOptions options) {
-                Optional<DocumentConverter> converterOpt = registry.getConverter(mimeType);
-                if (converterOpt.isPresent()) {
-                    DocumentConverter converter = converterOpt.get();
-                    if (converter.supportsStreaming()) {
-                        try {
-                            return converter.convert(inputStream, mimeType, options);
-                        } catch (Exception e) {
-                            logger.warn("Error converting nested file: {}", e.getMessage());
-                        }
-                    }
-                }
-                // 返回空结果表示不支持
-                return new ConversionResult(
-                        "Content not converted (unsupported format: " + mimeType + ")",
-                        Collections.emptyMap(),
-                        Collections.emptyList(),
-                        0,
-                        "unknown"
-                );
-            }
-
-            @Override
-            public boolean isSupported(String mimeType) {
-                return registry.isSupported(mimeType);
-            }
-        };
+        return new MarkItDownEngine(MarkItDownEngine.createDefaultRegistry());
     }
 }

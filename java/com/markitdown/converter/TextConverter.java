@@ -85,6 +85,37 @@ public class TextConverter implements DocumentConverter {
         }
     }
 
+    @Override
+    public ConversionResult convert(java.io.InputStream inputStream, String mimeType, ConversionOptions options)
+            throws ConversionException {
+        requireNonNull(inputStream, "Input stream cannot be null");
+        requireNonNull(mimeType, "MIME type cannot be null");
+        requireNonNull(options, "Conversion options cannot be null");
+
+        logger.info("Converting text stream: {}", mimeType);
+        mb = new MarkdownBuilder(new MarkdownConfig());
+
+        try {
+            String content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            String format = detectFormatFromMimeType(mimeType);
+            String syntheticFileName = buildSyntheticFileName(format);
+            Map<String, Object> metadata = extractStreamMetadata(syntheticFileName, content, format, options);
+            String markdownContent = convertToMarkdown(content, format, metadata, options);
+
+            return new ConversionResult(markdownContent, metadata, new ArrayList<>(),
+                    content.getBytes(StandardCharsets.UTF_8).length, syntheticFileName);
+        } catch (IOException e) {
+            String errorMessage = "Failed to process text stream: " + e.getMessage();
+            logger.error(errorMessage, e);
+            throw new ConversionException(errorMessage, e, "stream", getName());
+        }
+    }
+
+    @Override
+    public boolean supportsStreaming() {
+        return true;
+    }
+
     /**
      * @brief 检查是否支持指定的MIME类型
      * @details 判断转换器是否能够处理各种文本格式
@@ -146,6 +177,39 @@ public class TextConverter implements DocumentConverter {
         }
     }
 
+    private String detectFormatFromMimeType(String mimeType) {
+        switch (mimeType) {
+            case "text/markdown":
+                return "markdown";
+            case "text/csv":
+                return "csv";
+            case "application/json":
+                return "json";
+            case "application/xml":
+            case "text/xml":
+                return "xml";
+            default:
+                return "plain";
+        }
+    }
+
+    private String buildSyntheticFileName(String format) {
+        switch (format) {
+            case "markdown":
+                return "stream.md";
+            case "csv":
+                return "stream.csv";
+            case "json":
+                return "stream.json";
+            case "xml":
+                return "stream.xml";
+            case "log":
+                return "stream.log";
+            default:
+                return "stream.txt";
+        }
+    }
+
     /**
      * 从文本文件中提取元数据信息
      *
@@ -181,6 +245,32 @@ public class TextConverter implements DocumentConverter {
             }
 
             metadata.put("转换时刻", LocalDateTime.now());
+        }
+
+        return metadata;
+    }
+
+    private Map<String, Object> extractStreamMetadata(String fileName, String content, String format, ConversionOptions options) {
+        Map<String, Object> metadata = new HashMap<>();
+
+        if (options.isIncludeMetadata()) {
+            metadata.put("File Name", fileName);
+            metadata.put("File Size", content.getBytes(StandardCharsets.UTF_8).length);
+            metadata.put("File Type", format);
+
+            String[] lines = content.split("\\r?\\n");
+            metadata.put("Line Count", lines.length);
+            metadata.put("Character Count", content.length());
+
+            if ("csv".equals(format)) {
+                extractCsvMetadata(content, metadata);
+            } else if ("json".equals(format)) {
+                extractJsonMetadata(content, metadata);
+            } else if ("xml".equals(format)) {
+                extractXmlMetadata(content, metadata);
+            }
+
+            metadata.put("Converted At", LocalDateTime.now());
         }
 
         return metadata;
@@ -491,7 +581,7 @@ public class TextConverter implements DocumentConverter {
             mb.header(metadata);
         }
         // 根据格式处理内容
-        mb.append(mb.h2("内容"));
+        mb.append(mb.h2("Content"));
 
         switch (format) {
             case "md":

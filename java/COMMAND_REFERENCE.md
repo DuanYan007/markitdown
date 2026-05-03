@@ -1,5 +1,35 @@
 # MarkItDown Java 命令行参数完全参考
 
+## 2026-05 OCR 新参数
+
+除了 `--ocr` 与 `--language` 之外，当前版本还支持以下 OCR 选择参数：
+
+| 参数 | 参数值 | 说明 | 示例 |
+| --- | --- | --- | --- |
+| `--ocr-engine` | `<engine>` | 指定 OCR 后端：`tess4j`、`tesseract-cli`、`mock`、`http` | `--ocr-engine tesseract-cli` |
+| `--ocr-endpoint` | `<url>` | `http` OCR 服务地址 | `--ocr-endpoint http://127.0.0.1:8000/ocr` |
+| `--ocr-api-key` | `<key>` | `http` OCR 的认证信息 | `--ocr-api-key demo-key` |
+| `--ocr-timeout` | `<ms>` | OCR 请求超时时间 | `--ocr-timeout 30000` |
+
+说明：
+
+- `tess4j` 适合 `full`、`win32`、`win64`
+- `tesseract-cli` 适合 `linux64`、`mac`、`lite`
+- `http` 是可选扩展，不是默认主路径
+
+### OCR 示例
+
+```bash
+# embedded tess4j
+java -jar markitdown4j-full.jar image.png --ocr --ocr-engine tess4j -l chi_sim -o result.md
+
+# local tesseract command
+java -jar markitdown4j-linux64.jar image.png --ocr --ocr-engine tesseract-cli -l eng -o result.md
+
+# http OCR
+java -jar markitdown4j-lite.jar image.png --ocr --ocr-engine http --ocr-endpoint http://127.0.0.1:8000/ocr -o result.md
+```
+
 ## 📋 完整命令行参数表
 
 | 参数 | 长参数 | 参数值 | 说明 | 默认值 | 示例 |

@@ -1,5 +1,72 @@
 # MarkItDown Java 版本
 
+## 2026-05 构建与 OCR 更新
+
+当前版本已经支持按 profile 构建不同制品，并将 OCR 改造成可选后端。
+
+### 当前状态
+
+- 主线项目：`markitdown` Java CLI
+- 已支持构建：`lite`、`full`、`win32`、`win64`、`linux64`、`mac`
+- 已验证 OCR 路线：`tess4j`、`tesseract-cli`
+- 已补最小自动化测试：profile 配置、OCR 工厂、文本流式转换、ZIP 嵌套文本/JSON
+
+### 制品说明
+
+| Profile | 产物 | OCR 策略 | 推荐场景 |
+| --- | --- | --- | --- |
+| `lite` | `markitdown4j-<version>-lite.jar` | 不内置 `tess4j` native | 默认、最小体积、无 OCR 或外部 OCR |
+| `full` | `markitdown4j-<version>-full.jar` | 保留完整 `tess4j` 资源 | Windows 下想开箱即用 OCR |
+| `win32` | `markitdown4j-<version>-win32.jar` | 仅保留 32 位 Windows OCR native | 32 位 Windows |
+| `win64` | `markitdown4j-<version>-win64.jar` | 仅保留 64 位 Windows OCR native | 64 位 Windows |
+| `linux64` | `markitdown4j-<version>-linux64.jar` | 不内置 `tess4j`，建议走 `tesseract-cli` | Linux |
+| `mac` | `markitdown4j-<version>-mac.jar` | 不内置 `tess4j`，建议走 `tesseract-cli` | macOS |
+
+### 构建命令
+
+```bash
+# 默认轻量包
+mvn package -DskipTests
+
+# 全功能包
+mvn package -DskipTests -Pfull
+
+# 平台包
+mvn package -DskipTests -Pwin32
+mvn package -DskipTests -Pwin64
+mvn package -DskipTests -Plinux64
+mvn package -DskipTests -Pmac
+```
+
+### OCR 引擎
+
+当前可选 OCR 引擎：
+
+- `tess4j`
+- `tesseract-cli`
+- `mock`
+- `http`
+
+推荐组合：
+
+- Windows：`win64` 或 `full` + `--ocr-engine tess4j`
+- Linux：`linux64` + `--ocr-engine tesseract-cli`
+- macOS：`mac` + `--ocr-engine tesseract-cli`
+- CI / 无 OCR：`lite`
+
+### 命令行示例
+
+```bash
+# Windows embedded OCR
+java -jar markitdown4j-1.0.0-SNAPSHOT-win64.jar image.png --ocr --ocr-engine tess4j -l chi_sim -o result.md
+
+# Linux / macOS 外部 tesseract OCR
+java -jar markitdown4j-1.0.0-SNAPSHOT-linux64.jar image.png --ocr --ocr-engine tesseract-cli -l chi_sim -o result.md
+
+# 显式指定 tesseract 可执行文件
+java -jar markitdown4j-1.0.0-SNAPSHOT-mac.jar image.png --ocr --ocr-engine tesseract-cli --tesseract-path /opt/homebrew/bin/tesseract -o result.md
+```
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Java Version](https://img.shields.io/badge/java-17+-green)](https://www.oracle.com/java/)
 [![Maven](https://img.shields.io/badge/Maven-3.9+-red.svg)](https://maven.apache.org/)

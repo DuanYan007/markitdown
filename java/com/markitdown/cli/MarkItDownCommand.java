@@ -130,6 +130,30 @@ public class MarkItDownCommand implements Callable<Integer> {
     )
     private String language;
 
+    @Option(
+            names = {"--ocr-engine"},
+            description = "OCR engine: tess4j, tesseract-cli, http, mock (default: tess4j)"
+    )
+    private String ocrEngine;
+
+    @Option(
+            names = {"--ocr-endpoint"},
+            description = "HTTP OCR endpoint"
+    )
+    private String ocrEndpoint;
+
+    @Option(
+            names = {"--ocr-api-key"},
+            description = "HTTP OCR API key"
+    )
+    private String ocrApiKey;
+
+    @Option(
+            names = {"--ocr-timeout"},
+            description = "OCR timeout in milliseconds"
+    )
+    private int ocrTimeout;
+
     // ==================== 格式选项 ====================
 
     @Option(
@@ -777,62 +801,7 @@ public class MarkItDownCommand implements Callable<Integer> {
      * Creates and configures the MarkItDown engine.
      */
     private MarkItDownEngine createEngine() {
-        ConfigurationManager configManager = new ConfigurationManager();
-        ConverterRegistry registry = new ConverterRegistry();
-
-        // Register all converters
-        // PDF
-        registry.registerConverter(new PdfConverter());
-
-        // Word (DOCX and DOC)
-        registry.registerConverter(new DocxConverter());
-        registry.registerConverter(new DocConverter());
-
-        // PowerPoint (PPTX and PPT)
-        registry.registerConverter(new PptxConverter());
-        registry.registerConverter(new PptConverter());
-
-        // Excel (XLSX and XLS)
-        registry.registerConverter(new XlsxConverter());
-        registry.registerConverter(new XlsConverter());
-
-        // Web and text formats
-        registry.registerConverter(new HtmlConverter());
-        registry.registerConverter(new TextConverter());
-
-        // Media
-        registry.registerConverter(new ImageConverter());
-        registry.registerConverter(new AudioConverter());
-
-        // Archives
-        ZipConverter zipConverter = new ZipConverter();
-        zipConverter.setDelegate(createZipDelegate(registry));
-        registry.registerConverter(zipConverter);
-
-        return new MarkItDownEngine(registry);
-    }
-
-    /**
-     * Creates a delegate for ZIP converter to handle nested files.
-     */
-    private ZipConverter.DocumentConverterDelegate createZipDelegate(ConverterRegistry registry) {
-        return (inputStream, mimeType, options) -> {
-            Optional<DocumentConverter> converterOpt = registry.getConverter(mimeType);
-            if (converterOpt.isPresent()) {
-                DocumentConverter converter = converterOpt.get();
-                if (converter.supportsStreaming()) {
-                    return converter.convert(inputStream, mimeType, options);
-                }
-            }
-            // Return empty result for unsupported types
-            return new ConversionResult(
-                    "Content not converted (unsupported format: " + mimeType + ")",
-                    Collections.emptyMap(),
-                    Collections.emptyList(),
-                    0,
-                    "unknown"
-            );
-        };
+        return new MarkItDownEngine(MarkItDownEngine.createDefaultRegistry());
     }
 
     /**
@@ -856,6 +825,14 @@ public class MarkItDownCommand implements Callable<Integer> {
         boolean useOcrConfig = this.useOcr || configManager.getBooleanProperty("ocr.enable", false);
         String languageConfig = this.language != null ? this.language :
             configManager.getProperty("ocr.language", "auto");
+        String ocrEngineConfig = this.ocrEngine != null ? this.ocrEngine :
+            configManager.getOcrEngine();
+        String ocrEndpointConfig = this.ocrEndpoint != null ? this.ocrEndpoint :
+            configManager.getOcrEndpoint();
+        String ocrApiKeyConfig = this.ocrApiKey != null ? this.ocrApiKey :
+            configManager.getOcrApiKey();
+        int ocrTimeoutConfig = this.ocrTimeout > 0 ? this.ocrTimeout :
+            configManager.getOcrTimeout();
 
         // Format options with precedence
         String tableFormatConfig = this.tableFormat != null ? this.tableFormat :
@@ -885,6 +862,10 @@ public class MarkItDownCommand implements Callable<Integer> {
                .includeMetadata(incMetadata)
                .useOcr(useOcrConfig)
                .language(languageConfig)
+               .ocrEngine(ocrEngineConfig)
+               .ocrEndpoint(ocrEndpointConfig)
+               .ocrApiKey(ocrApiKeyConfig)
+               .ocrTimeout(ocrTimeoutConfig)
                .tableFormat(tableFormatConfig)
                .imageFormat(imageFormatConfig)
                .imageOutputDir(imageOutputDirConfig)
@@ -962,18 +943,8 @@ public class MarkItDownCommand implements Callable<Integer> {
         }
 
         // Set output path in options for image extraction
-        ConversionOptions optionsWithPath = ConversionOptions.builder()
-                .includeImages(options.isIncludeImages())
-                .includeTables(options.isIncludeTables())
-                .includeMetadata(options.isIncludeMetadata())
-                .useOcr(options.isUseOcr())
-                .language(options.getLanguage())
-                .tableFormat(options.getTableFormat())
-                .imageFormat(options.getImageFormat())
-                .imageOutputDir(options.getImageOutputDir())
-                .outputPath(outputPath)
-                .maxFileSize(options.getMaxFileSize())
-                .build();
+        ConversionOptions optionsWithPath = new ConversionOptions(options)
+                .setOutputPath(outputPath);
 
         // Convert the file
         ConversionResult result = engine.convert(inputPath, optionsWithPath);

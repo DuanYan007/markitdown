@@ -42,6 +42,7 @@
         <junit.version>5.10.1</junit.version>
         <slf4j.version>2.0.9</slf4j.version>
         <logback.version>1.4.14</logback.version>
+        <log4j.version>2.24.3</log4j.version>
         <apache.poi.version>5.2.5</apache.poi.version>
         <pdfbox.version>2.0.30</pdfbox.version>
         <jsoup.version>1.17.2</jsoup.version>
@@ -49,6 +50,30 @@
         <jackson.version>2.16.1</jackson.version>
         <picocli.version>4.7.5</picocli.version>
         <tika.version>2.9.1</tika.version>
+        <build.profile>lite</build.profile>
+        <shade.native.exclude.1>__shade_noop__</shade.native.exclude.1>
+        <shade.native.exclude.2>__shade_noop__</shade.native.exclude.2>
+        <shade.native.exclude.3>__shade_noop__</shade.native.exclude.3>
+        <shade.native.exclude.4>__shade_noop__</shade.native.exclude.4>
+        <shade.native.exclude.5>__shade_noop__</shade.native.exclude.5>
+        <shade.native.exclude.6>__shade_noop__</shade.native.exclude.6>
+        <shade.native.exclude.7>__shade_noop__</shade.native.exclude.7>
+        <shade.native.exclude.8>__shade_noop__</shade.native.exclude.8>
+        <shade.native.exclude.9>__shade_noop__</shade.native.exclude.9>
+        <shade.native.exclude.10>__shade_noop__</shade.native.exclude.10>
+        <shade.native.exclude.11>__shade_noop__</shade.native.exclude.11>
+        <shade.native.exclude.12>__shade_noop__</shade.native.exclude.12>
+        <shade.native.exclude.13>__shade_noop__</shade.native.exclude.13>
+        <shade.native.exclude.14>__shade_noop__</shade.native.exclude.14>
+        <shade.native.exclude.15>__shade_noop__</shade.native.exclude.15>
+        <shade.native.exclude.16>__shade_noop__</shade.native.exclude.16>
+        <shade.native.exclude.17>__shade_noop__</shade.native.exclude.17>
+        <shade.native.exclude.18>__shade_noop__</shade.native.exclude.18>
+        <shade.native.exclude.19>__shade_noop__</shade.native.exclude.19>
+        <shade.native.exclude.20>__shade_noop__</shade.native.exclude.20>
+        <shade.native.exclude.21>__shade_noop__</shade.native.exclude.21>
+        <shade.native.exclude.22>__shade_noop__</shade.native.exclude.22>
+        <shade.native.exclude.23>__shade_noop__</shade.native.exclude.23>
     </properties>
 
     <dependencies>
@@ -105,13 +130,6 @@
             <version>${jsoup.version}</version>
         </dependency>
 
-        <!-- Tess4J for OCR -->
-        <dependency>
-            <groupId>net.sourceforge.tess4j</groupId>
-            <artifactId>tess4j</artifactId>
-            <version>${tess4j.version}</version>
-        </dependency>
-
         <!-- Jackson for JSON/XML processing -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -142,6 +160,11 @@
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-to-slf4j</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
 
         <!-- Test Dependencies -->
         <dependency>
@@ -159,8 +182,14 @@
     </dependencies>
 
     <build>
+        <finalName>markitdown4j-${project.version}-${build.profile}</finalName>
         <sourceDirectory>java</sourceDirectory>
         <testSourceDirectory>src/test/java</testSourceDirectory>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -215,11 +244,34 @@
                                     <excludes>
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
-                                        <exclude>META-INF/*.RSA</exclude>
-                                        <exclude>META-INF/versions/**</exclude>
-                                        <exclude>META-INF/maven/**</exclude>
-                                    </excludes>
-                                </filter>
+                                    <exclude>META-INF/*.RSA</exclude>
+                                    <exclude>META-INF/versions/**</exclude>
+                                    <exclude>META-INF/maven/**</exclude>
+                                    <exclude>${shade.native.exclude.1}</exclude>
+                                    <exclude>${shade.native.exclude.2}</exclude>
+                                    <exclude>${shade.native.exclude.3}</exclude>
+                                    <exclude>${shade.native.exclude.4}</exclude>
+                                    <exclude>${shade.native.exclude.5}</exclude>
+                                    <exclude>${shade.native.exclude.6}</exclude>
+                                    <exclude>${shade.native.exclude.7}</exclude>
+                                    <exclude>${shade.native.exclude.8}</exclude>
+                                    <exclude>${shade.native.exclude.9}</exclude>
+                                    <exclude>${shade.native.exclude.10}</exclude>
+                                    <exclude>${shade.native.exclude.11}</exclude>
+                                    <exclude>${shade.native.exclude.12}</exclude>
+                                    <exclude>${shade.native.exclude.13}</exclude>
+                                    <exclude>${shade.native.exclude.14}</exclude>
+                                    <exclude>${shade.native.exclude.15}</exclude>
+                                    <exclude>${shade.native.exclude.16}</exclude>
+                                    <exclude>${shade.native.exclude.17}</exclude>
+                                    <exclude>${shade.native.exclude.18}</exclude>
+                                    <exclude>${shade.native.exclude.19}</exclude>
+                                    <exclude>${shade.native.exclude.20}</exclude>
+                                    <exclude>${shade.native.exclude.21}</exclude>
+                                    <exclude>${shade.native.exclude.22}</exclude>
+                                    <exclude>${shade.native.exclude.23}</exclude>
+                                </excludes>
+                            </filter>
                                 <!-- 保留PDFBox资源文件 -->
                                 <filter>
                                     <artifact>org.apache.pdfbox:*</artifact>
@@ -296,6 +348,124 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>lite</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <properties>
+                <build.profile>lite</build.profile>
+            </properties>
+        </profile>
+
+        <profile>
+            <id>full</id>
+            <properties>
+                <build.profile>full</build.profile>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>net.sourceforge.tess4j</groupId>
+                    <artifactId>tess4j</artifactId>
+                    <version>${tess4j.version}</version>
+                </dependency>
+            </dependencies>
+        </profile>
+
+        <profile>
+            <id>win32</id>
+            <properties>
+                <build.profile>win32</build.profile>
+                <shade.native.exclude.1>win32-x86-64/**</shade.native.exclude.1>
+                <shade.native.exclude.3>com/sun/jna/win32-aarch64/**</shade.native.exclude.3>
+                <shade.native.exclude.5>com/sun/jna/win32-x86-64/**</shade.native.exclude.5>
+                <shade.native.exclude.6>com/sun/jna/linux-*/**</shade.native.exclude.6>
+                <shade.native.exclude.17>com/sun/jna/darwin-*/**</shade.native.exclude.17>
+                <shade.native.exclude.19>com/sun/jna/freebsd-*/**</shade.native.exclude.19>
+                <shade.native.exclude.20>com/sun/jna/openbsd-*/**</shade.native.exclude.20>
+                <shade.native.exclude.21>com/sun/jna/sunos-*/**</shade.native.exclude.21>
+                <shade.native.exclude.22>com/sun/jna/aix-*/**</shade.native.exclude.22>
+                <shade.native.exclude.23>com/sun/jna/dragonflybsd-*/**</shade.native.exclude.23>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>net.sourceforge.tess4j</groupId>
+                    <artifactId>tess4j</artifactId>
+                    <version>${tess4j.version}</version>
+                </dependency>
+            </dependencies>
+        </profile>
+
+        <profile>
+            <id>win64</id>
+            <properties>
+                <build.profile>win64</build.profile>
+                <shade.native.exclude.1>win32-x86/**</shade.native.exclude.1>
+                <shade.native.exclude.3>com/sun/jna/win32-aarch64/**</shade.native.exclude.3>
+                <shade.native.exclude.4>com/sun/jna/win32-x86/**</shade.native.exclude.4>
+                <shade.native.exclude.6>com/sun/jna/linux-*/**</shade.native.exclude.6>
+                <shade.native.exclude.17>com/sun/jna/darwin-*/**</shade.native.exclude.17>
+                <shade.native.exclude.19>com/sun/jna/freebsd-*/**</shade.native.exclude.19>
+                <shade.native.exclude.20>com/sun/jna/openbsd-*/**</shade.native.exclude.20>
+                <shade.native.exclude.21>com/sun/jna/sunos-*/**</shade.native.exclude.21>
+                <shade.native.exclude.22>com/sun/jna/aix-*/**</shade.native.exclude.22>
+                <shade.native.exclude.23>com/sun/jna/dragonflybsd-*/**</shade.native.exclude.23>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>net.sourceforge.tess4j</groupId>
+                    <artifactId>tess4j</artifactId>
+                    <version>${tess4j.version}</version>
+                </dependency>
+            </dependencies>
+        </profile>
+
+        <profile>
+            <id>linux64</id>
+            <properties>
+                <build.profile>linux64</build.profile>
+                <shade.native.exclude.1>win32-x86/**</shade.native.exclude.1>
+                <shade.native.exclude.2>win32-x86-64/**</shade.native.exclude.2>
+                <shade.native.exclude.3>com/sun/jna/win32-aarch64/**</shade.native.exclude.3>
+                <shade.native.exclude.4>com/sun/jna/win32-x86/**</shade.native.exclude.4>
+                <shade.native.exclude.5>com/sun/jna/win32-x86-64/**</shade.native.exclude.5>
+                <shade.native.exclude.6>com/sun/jna/linux-aarch64/**</shade.native.exclude.6>
+                <shade.native.exclude.7>com/sun/jna/linux-arm/**</shade.native.exclude.7>
+                <shade.native.exclude.8>com/sun/jna/linux-armel/**</shade.native.exclude.8>
+                <shade.native.exclude.9>com/sun/jna/linux-loongarch64/**</shade.native.exclude.9>
+                <shade.native.exclude.10>com/sun/jna/linux-mips64el/**</shade.native.exclude.10>
+                <shade.native.exclude.11>com/sun/jna/linux-ppc/**</shade.native.exclude.11>
+                <shade.native.exclude.12>com/sun/jna/linux-ppc64le/**</shade.native.exclude.12>
+                <shade.native.exclude.13>com/sun/jna/linux-riscv64/**</shade.native.exclude.13>
+                <shade.native.exclude.14>com/sun/jna/linux-s390x/**</shade.native.exclude.14>
+                <shade.native.exclude.15>com/sun/jna/linux-x86/**</shade.native.exclude.15>
+                <shade.native.exclude.17>com/sun/jna/darwin-*/**</shade.native.exclude.17>
+                <shade.native.exclude.19>com/sun/jna/freebsd-*/**</shade.native.exclude.19>
+                <shade.native.exclude.20>com/sun/jna/openbsd-*/**</shade.native.exclude.20>
+                <shade.native.exclude.21>com/sun/jna/sunos-*/**</shade.native.exclude.21>
+                <shade.native.exclude.22>com/sun/jna/aix-*/**</shade.native.exclude.22>
+                <shade.native.exclude.23>com/sun/jna/dragonflybsd-*/**</shade.native.exclude.23>
+            </properties>
+        </profile>
+
+        <profile>
+            <id>mac</id>
+            <properties>
+                <build.profile>mac</build.profile>
+                <shade.native.exclude.1>win32-x86/**</shade.native.exclude.1>
+                <shade.native.exclude.2>win32-x86-64/**</shade.native.exclude.2>
+                <shade.native.exclude.3>com/sun/jna/win32-aarch64/**</shade.native.exclude.3>
+                <shade.native.exclude.4>com/sun/jna/win32-x86/**</shade.native.exclude.4>
+                <shade.native.exclude.5>com/sun/jna/win32-x86-64/**</shade.native.exclude.5>
+                <shade.native.exclude.6>com/sun/jna/linux-*/**</shade.native.exclude.6>
+                <shade.native.exclude.19>com/sun/jna/freebsd-*/**</shade.native.exclude.19>
+                <shade.native.exclude.20>com/sun/jna/openbsd-*/**</shade.native.exclude.20>
+                <shade.native.exclude.21>com/sun/jna/sunos-*/**</shade.native.exclude.21>
+                <shade.native.exclude.22>com/sun/jna/aix-*/**</shade.native.exclude.22>
+                <shade.native.exclude.23>com/sun/jna/dragonflybsd-*/**</shade.native.exclude.23>
+            </properties>
+        </profile>
+
         <profile>
             <id>release</id>
             <build>

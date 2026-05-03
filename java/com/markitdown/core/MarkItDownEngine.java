@@ -3,6 +3,18 @@ package com.markitdown.core;
 import com.markitdown.api.ConversionResult;
 import com.markitdown.api.DocumentConverter;
 import com.markitdown.config.ConversionOptions;
+import com.markitdown.converter.AudioConverter;
+import com.markitdown.converter.DocConverter;
+import com.markitdown.converter.DocxConverter;
+import com.markitdown.converter.HtmlConverter;
+import com.markitdown.converter.ImageConverter;
+import com.markitdown.converter.PdfConverter;
+import com.markitdown.converter.PptConverter;
+import com.markitdown.converter.PptxConverter;
+import com.markitdown.converter.TextConverter;
+import com.markitdown.converter.XlsConverter;
+import com.markitdown.converter.XlsxConverter;
+import com.markitdown.converter.ZipConverter;
 import com.markitdown.exception.ConversionException;
 import com.markitdown.utils.FileTypeDetector;
 import org.slf4j.Logger;
@@ -55,7 +67,7 @@ public class MarkItDownEngine {
      * Creates a new MarkItDownEngine with a default converter registry.
      */
     public MarkItDownEngine() {
-        this.converterRegistry = new ConverterRegistry();
+        this.converterRegistry = createDefaultRegistry();
         this.executorService = ForkJoinPool.commonPool();
     }
 
@@ -440,5 +452,43 @@ public class MarkItDownEngine {
         if (executorService != ForkJoinPool.commonPool()) {
             executorService.shutdown();
         }
+    }
+
+    public static ConverterRegistry createDefaultRegistry() {
+        ConverterRegistry registry = new ConverterRegistry();
+        registerDefaultConverters(registry);
+        return registry;
+    }
+
+    public static void registerDefaultConverters(ConverterRegistry registry) {
+        Objects.requireNonNull(registry, "Converter registry cannot be null");
+
+        registry.registerConverter(new PdfConverter());
+        registry.registerConverter(new DocxConverter());
+        registry.registerConverter(new DocConverter());
+        registry.registerConverter(new PptxConverter());
+        registry.registerConverter(new PptConverter());
+        registry.registerConverter(new XlsxConverter());
+        registry.registerConverter(new XlsConverter());
+        registry.registerConverter(new HtmlConverter());
+        registry.registerConverter(new TextConverter());
+        registry.registerConverter(new ImageConverter());
+        registry.registerConverter(new AudioConverter());
+
+        ZipConverter zipConverter = new ZipConverter();
+        zipConverter.setDelegate(new ZipConverter.DocumentConverterDelegate() {
+            @Override
+            public ConversionResult convert(InputStream inputStream, String mimeType, ConversionOptions options)
+                    throws ConversionException {
+                MarkItDownEngine nestedEngine = new MarkItDownEngine(registry);
+                return nestedEngine.convert(inputStream, mimeType, options);
+            }
+
+            @Override
+            public boolean isSupported(String mimeType) {
+                return registry.isSupported(mimeType);
+            }
+        });
+        registry.registerConverter(zipConverter);
     }
 }

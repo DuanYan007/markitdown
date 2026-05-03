@@ -108,7 +108,7 @@ public class ConverterRegistry {
         // 查找支持此MIME类型的转换器
         List<DocumentConverter> matchingConverters = nameToConverter.values().stream()
                 .filter(converter -> converter.supports(mimeType))
-                .sorted((c1, c2) -> Integer.compare(c2.getPriority(), c1.getPriority())) // 优先级高的在前
+                .sorted((c1, c2) -> Integer.compare(c2.getPriority(), c1.getPriority())) // 数值越大优先级越高
                 .collect(Collectors.toList());
 
         if (matchingConverters.isEmpty()) {

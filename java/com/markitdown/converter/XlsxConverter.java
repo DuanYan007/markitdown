@@ -52,8 +52,8 @@ public class XlsxConverter implements DocumentConverter {
             // 提取元数据
             if (options.isIncludeMetadata()) {
                 // 文件基本信息
-                metadata.put("文件名", filePath.getFileName().toString());
-                metadata.put("文件大小", filePath.toFile().length());
+                metadata.put("File Name", filePath.getFileName().toString());
+                metadata.put("File Size", filePath.toFile().length());
             }
 
             // 将工作簿转换为Markdown格式
@@ -101,9 +101,9 @@ public class XlsxConverter implements DocumentConverter {
         if (options.isIncludeMetadata()) {
 
             // 工作簿统计信息
-            metadata.put("工作表数量", workbook.getNumberOfSheets());
-            metadata.put("当前工作表索引(0为起始索引)", workbook.getActiveSheetIndex());
-            metadata.put("转换时刻", LocalDateTime.now());
+            metadata.put("Sheet Count", workbook.getNumberOfSheets());
+            metadata.put("Active Sheet Index", workbook.getActiveSheetIndex());
+            metadata.put("Converted At", LocalDateTime.now());
 
             // 计算总单元格数量（近似值）
             // Todo: 活跃单元格数量有必要统计么?
@@ -112,7 +112,7 @@ public class XlsxConverter implements DocumentConverter {
                 Sheet sheet = workbook.getSheetAt(i);
                 totalCells += estimateSheetSize(sheet);
             }
-            metadata.put("统计单元格数量", totalCells);
+            metadata.put("Estimated Cell Count", totalCells);
         }
 
         return metadata;
@@ -163,9 +163,9 @@ public class XlsxConverter implements DocumentConverter {
      */
     private void processSheet(Sheet sheet, int sheetNum, ConversionOptions options) {
         String sheetName = sheet.getSheetName();
-        mb.append(mb.h2("工作表 " + sheetNum + ": " + sheetName));
+        mb.append(mb.h2("Sheet " + sheetNum + ": " + sheetName));
         if (!options.isIncludeTables()) {
-            mb.append(mb.italic("表格功能在转换选项中被禁用"));
+            mb.append(mb.italic("Table output is disabled in the current conversion options."));
             mb.newline(2);
             return;
         }
@@ -175,7 +175,7 @@ public class XlsxConverter implements DocumentConverter {
         int lastRow = sheet.getLastRowNum();
 
         if (firstRow < 0 || lastRow < 0 || lastRow < firstRow) {
-            mb.append(mb.italic("空工作表"));
+            mb.append(mb.italic("Empty sheet"));
             mb.newline(2);
             mb.horizontalRule();
             return;

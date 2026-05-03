@@ -1,5 +1,50 @@
 # MarkItDown Java 安装与配置指南
 
+## 2026-05 安装建议
+
+当前发行包已经区分为轻量包和平台包，建议按下面方式选择：
+
+| 平台 | 推荐制品 | OCR 推荐方式 |
+| --- | --- | --- |
+| Windows 64 位 | `win64` 或 `full` | `--ocr-engine tess4j` |
+| Windows 32 位 | `win32` | `--ocr-engine tess4j` |
+| Linux | `linux64` | 安装系统 `tesseract`，使用 `--ocr-engine tesseract-cli` |
+| macOS | `mac` | 安装系统 `tesseract`，使用 `--ocr-engine tesseract-cli` |
+| 无 OCR / CI | `lite` | 不启用 OCR，或接 `tesseract-cli` / `http` |
+
+### 从源码构建
+
+```bash
+# 默认轻量包
+mvn package -DskipTests
+
+# Windows full OCR
+mvn package -DskipTests -Pwin64
+
+# Linux / macOS 轻量平台包
+mvn package -DskipTests -Plinux64
+mvn package -DskipTests -Pmac
+```
+
+### Linux / macOS OCR 推荐方式
+
+对于 Linux 和 macOS，推荐安装系统级 `tesseract`，然后使用命令行 OCR：
+
+```bash
+# Linux
+java -jar markitdown4j-linux64.jar image.png --ocr --ocr-engine tesseract-cli -l chi_sim -o result.md
+
+# macOS
+java -jar markitdown4j-mac.jar image.png --ocr --ocr-engine tesseract-cli -l eng -o result.md
+```
+
+如果 `tesseract` 不在默认 PATH 中，可以显式指定：
+
+```properties
+ocr.engine=tesseract-cli
+tesseract.path=/opt/homebrew/bin/tesseract
+```
+
 > 📦 markitdown4j.jar 完整安装配置教程
 
 ## 📋 系统要求

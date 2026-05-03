@@ -85,6 +85,22 @@ public class ConversionOptions {
      */
     private boolean useOcr = true;
     /**
+     * @brief OCR引擎名称
+     */
+    private String ocrEngine = "tess4j";
+    /**
+     * @brief HTTP OCR服务地址
+     */
+    private String ocrEndpoint;
+    /**
+     * @brief HTTP OCR服务认证信息
+     */
+    private String ocrApiKey;
+    /**
+     * @brief OCR超时时间（毫秒）
+     */
+    private int ocrTimeout = 30000;
+    /**
      * @brief 自定义选项映射
      * @details 存储特定转换器的自定义配置选项
      */
@@ -113,6 +129,10 @@ public class ConversionOptions {
         this.maxFileSize = other.maxFileSize;
         this.tempDirectory = other.tempDirectory;
         this.useOcr = other.useOcr;
+        this.ocrEngine = other.ocrEngine;
+        this.ocrEndpoint = other.ocrEndpoint;
+        this.ocrApiKey = other.ocrApiKey;
+        this.ocrTimeout = other.ocrTimeout;
         this.customOptions = new HashMap<>(other.customOptions);
     }
 
@@ -338,6 +358,42 @@ public class ConversionOptions {
         return this;
     }
 
+    public String getOcrEngine() {
+        return ocrEngine;
+    }
+
+    public ConversionOptions setOcrEngine(String ocrEngine) {
+        this.ocrEngine = ocrEngine;
+        return this;
+    }
+
+    public String getOcrEndpoint() {
+        return ocrEndpoint;
+    }
+
+    public ConversionOptions setOcrEndpoint(String ocrEndpoint) {
+        this.ocrEndpoint = ocrEndpoint;
+        return this;
+    }
+
+    public String getOcrApiKey() {
+        return ocrApiKey;
+    }
+
+    public ConversionOptions setOcrApiKey(String ocrApiKey) {
+        this.ocrApiKey = ocrApiKey;
+        return this;
+    }
+
+    public int getOcrTimeout() {
+        return ocrTimeout;
+    }
+
+    public ConversionOptions setOcrTimeout(int ocrTimeout) {
+        this.ocrTimeout = ocrTimeout;
+        return this;
+    }
+
     /**
      * Gets custom options specific to converters.
      *
@@ -439,6 +495,26 @@ public class ConversionOptions {
 
         public Builder useOcr(boolean useOcr) {
             options.setUseOcr(useOcr);
+            return this;
+        }
+
+        public Builder ocrEngine(String ocrEngine) {
+            options.setOcrEngine(ocrEngine);
+            return this;
+        }
+
+        public Builder ocrEndpoint(String ocrEndpoint) {
+            options.setOcrEndpoint(ocrEndpoint);
+            return this;
+        }
+
+        public Builder ocrApiKey(String ocrApiKey) {
+            options.setOcrApiKey(ocrApiKey);
+            return this;
+        }
+
+        public Builder ocrTimeout(int ocrTimeout) {
+            options.setOcrTimeout(ocrTimeout);
             return this;
         }
 

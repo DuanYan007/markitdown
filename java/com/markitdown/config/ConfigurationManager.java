@@ -62,8 +62,8 @@ public class ConfigurationManager {
      */
     private void setDefaultValues(Properties props) {
         // 引擎路径默认值
-        props.setProperty("tesseract.path", "O:\\tesserOCR");
-        props.setProperty("tessdata.path", "O:\\tesserOCR\\tessdata");
+        props.setProperty("tesseract.path", "");
+        props.setProperty("tessdata.path", "");
 
         // 输出配置默认值
         props.setProperty("output.dir", "./output");
@@ -79,7 +79,11 @@ public class ConfigurationManager {
 
         // OCR默认值
         props.setProperty("ocr.enable", "false");
+        props.setProperty("ocr.engine", "tess4j");
         props.setProperty("ocr.language", "auto");
+        props.setProperty("ocr.endpoint", "");
+        props.setProperty("ocr.api.key", "");
+        props.setProperty("ocr.timeout", "30000");
 
         // 格式化默认值
         props.setProperty("format.image", "markdown");
@@ -429,7 +433,11 @@ public class ConfigurationManager {
 
         // OCR选项
         builder.useOcr(getBooleanProperty("ocr.enable", false))
-               .language(getProperty("ocr.language", "auto"));
+               .language(getProperty("ocr.language", "auto"))
+               .ocrEngine(getProperty("ocr.engine", "tess4j"))
+               .ocrEndpoint(getProperty("ocr.endpoint", ""))
+               .ocrApiKey(getProperty("ocr.api.key", ""))
+               .ocrTimeout(getIntProperty("ocr.timeout", 30000));
 
         // 格式选项
         builder.imageFormat(getProperty("format.image", "markdown"))
@@ -445,14 +453,30 @@ public class ConfigurationManager {
      * 获取Tesseract路径配置
      */
     public String getTesseractPath() {
-        return getProperty("tesseract.path", "O:\\tesserOCR");
+        return getProperty("tesseract.path", "");
     }
 
     /**
      * 获取Tessdata路径配置
      */
     public String getTessdataPath() {
-        return getProperty("tessdata.path", "O:\\tesserOCR\\tessdata");
+        return getProperty("tessdata.path", "");
+    }
+
+    public String getOcrEngine() {
+        return getProperty("ocr.engine", "tess4j");
+    }
+
+    public String getOcrEndpoint() {
+        return getProperty("ocr.endpoint", "");
+    }
+
+    public String getOcrApiKey() {
+        return getProperty("ocr.api.key", "");
+    }
+
+    public int getOcrTimeout() {
+        return getIntProperty("ocr.timeout", 30000);
     }
 
     /**

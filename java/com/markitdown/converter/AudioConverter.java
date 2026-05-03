@@ -150,9 +150,9 @@ public class AudioConverter implements DocumentConverter {
         String fileExtension = getFileExtension(fileName).toLowerCase();
 
         // 基本文件信息
-        metadata.put("文件名", fileName);
-        metadata.put("文件大小", formatFileSize(filePath.toFile().length()));
-        metadata.put("格式", "audio/" + fileExtension);
+        metadata.put("File Name", fileName);
+        metadata.put("File Size", formatFileSize(filePath.toFile().length()));
+        metadata.put("Format", "audio/" + fileExtension);
 
         if (!options.isIncludeMetadata()) {
             return metadata;
@@ -170,31 +170,31 @@ public class AudioConverter implements DocumentConverter {
             parser.parse(stream, handler, tikaMetadata, context);
 
             // 提取音频特定元数据
-            addIfNotEmpty(metadata, "标题", tikaMetadata.get("title"));
-            addIfNotEmpty(metadata, "艺术家", tikaMetadata.get("xmpDM:artist"));
-            addIfNotEmpty(metadata, "专辑", tikaMetadata.get("xmpDM:album"));
-            addIfNotEmpty(metadata, "年份", tikaMetadata.get("xmpDM:releaseDate"));
-            addIfNotEmpty(metadata, "流派", tikaMetadata.get("xmpDM:genre"));
-            addIfNotEmpty(metadata, "曲目号", tikaMetadata.get("xmpDM:trackNumber"));
-            addIfNotEmpty(metadata, "作曲家", tikaMetadata.get("xmpDM:composer"));
-            addIfNotEmpty(metadata, "时长", formatDuration(tikaMetadata.get("xmpDM:duration")));
-            addIfNotEmpty(metadata, "采样率", tikaMetadata.get("xmpDM:audioSampleRate"));
-            addIfNotEmpty(metadata, "声道数", tikaMetadata.get("xmpDM:audioChannelType"));
-            addIfNotEmpty(metadata, "比特率", tikaMetadata.get("xmpDM:audioCompressor"));
+            addIfNotEmpty(metadata, "Title", tikaMetadata.get("title"));
+            addIfNotEmpty(metadata, "Artist", tikaMetadata.get("xmpDM:artist"));
+            addIfNotEmpty(metadata, "Album", tikaMetadata.get("xmpDM:album"));
+            addIfNotEmpty(metadata, "Release Year", tikaMetadata.get("xmpDM:releaseDate"));
+            addIfNotEmpty(metadata, "Genre", tikaMetadata.get("xmpDM:genre"));
+            addIfNotEmpty(metadata, "Track Number", tikaMetadata.get("xmpDM:trackNumber"));
+            addIfNotEmpty(metadata, "Composer", tikaMetadata.get("xmpDM:composer"));
+            addIfNotEmpty(metadata, "Duration", formatDuration(tikaMetadata.get("xmpDM:duration")));
+            addIfNotEmpty(metadata, "Sample Rate", tikaMetadata.get("xmpDM:audioSampleRate"));
+            addIfNotEmpty(metadata, "Channel Type", tikaMetadata.get("xmpDM:audioChannelType"));
+            addIfNotEmpty(metadata, "Bitrate", tikaMetadata.get("xmpDM:audioCompressor"));
 
             // 检测 MIME 类型
             Tika tika = new Tika();
             String detectedMime = tika.detect(filePath.toFile());
-            metadata.put("检测到的MIME类型", detectedMime);
+            metadata.put("Detected MIME Type", detectedMime);
 
             logger.debug("Successfully extracted metadata from audio file: {}", fileName);
 
         } catch (Exception e) {
             logger.warn("Failed to extract detailed metadata: {}", e.getMessage());
-            metadata.put("元数据提取错误", e.getMessage());
+            metadata.put("Metadata Error", e.getMessage());
         }
 
-        metadata.put("转换时刻", LocalDateTime.now());
+        metadata.put("Converted At", LocalDateTime.now());
         return metadata;
     }
 
@@ -400,12 +400,12 @@ public class AudioConverter implements DocumentConverter {
         markdown.append("# ").append(title).append("\n\n");
 
         // 添加音频文件信息
-        markdown.append("## 音频文件信息\n\n");
-        markdown.append("**文件:** `").append(fileName).append("`\n\n");
+        markdown.append("## Audio File\n\n");
+        markdown.append("**File:** `").append(fileName).append("`\n\n");
 
         // 添加元数据部分
         if (!metadata.isEmpty()) {
-            markdown.append("## 元数据\n\n");
+            markdown.append("## Metadata\n\n");
             for (Map.Entry<String, Object> entry : metadata.entrySet()) {
                 if (entry.getValue() != null) {
                     markdown.append("- **").append(entry.getKey())
@@ -416,7 +416,7 @@ public class AudioConverter implements DocumentConverter {
         }
 
         // 添加转写部分
-        markdown.append("## 转写内容\n\n");
+        markdown.append("## Transcription\n\n");
         markdown.append(transcription);
         markdown.append("\n");
 

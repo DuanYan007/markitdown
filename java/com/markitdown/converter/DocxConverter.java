@@ -66,8 +66,8 @@ public class DocxConverter implements DocumentConverter {
 
             if (options.isIncludeMetadata()) {
                 // 文件基本信息
-                metadata.put("文件名", filePath.getFileName().toString());
-                metadata.put("文件大小", filePath.toFile().length());
+                metadata.put("File Name", filePath.getFileName().toString());
+                metadata.put("File Size", filePath.toFile().length());
             }
 
             // 将文档转换为Markdown
@@ -135,9 +135,9 @@ public class DocxConverter implements DocumentConverter {
             // 文档统计信息更可靠
 
             // 文档统计信息
-            metadata.put("段落数量", document.getParagraphs().size());
-            metadata.put("表格数量", document.getTables().size());
-            metadata.put("转换时刻", LocalDateTime.now());
+            metadata.put("Paragraph Count", document.getParagraphs().size());
+            metadata.put("Table Count", document.getTables().size());
+            metadata.put("Converted At", LocalDateTime.now());
         }
 
         return metadata;
@@ -172,7 +172,7 @@ public class DocxConverter implements DocumentConverter {
      */
     // 使用getParagraph 获取文档主要内容
     private void processDocumentBody(XWPFDocument document, ConversionOptions options, Path filePath) {
-        mb.append(mb.heading("内容", 2));
+        mb.append(mb.heading("Content", 2));
 
         // 提取图片（如果启用）
         List<com.markitdown.model.ExtractedImage> extractedImages = null;
@@ -230,7 +230,7 @@ public class DocxConverter implements DocumentConverter {
                     // 找到对应的提取图片
                     ExtractedImage extractedImage = findExtractedImage(picture, extractedImages);
                     if (extractedImage != null) {
-                        mb.append(extractedImage.toMarkdown("图片")).newline();
+                        mb.append(extractedImage.toMarkdown("Image")).newline();
                     }
                 }
             }
@@ -244,7 +244,7 @@ public class DocxConverter implements DocumentConverter {
                     boolean found = false;
                     for (ExtractedImage img : extractedImages) {
                         if (img.getOriginalFilename().equals(imageFilename)) {
-                            mb.append(img.toMarkdown("图片")).newline();
+                            mb.append(img.toMarkdown("Image")).newline();
                             found = true;
                             break;
                         }
@@ -253,14 +253,14 @@ public class DocxConverter implements DocumentConverter {
                     // 策略2b: 如果文件名不匹配，按索引分配
                     if (!found && currentImageIndex < extractedImages.size()) {
                         ExtractedImage img = extractedImages.get(currentImageIndex);
-                        mb.append(img.toMarkdown("图片")).newline();
+                        mb.append(img.toMarkdown("Image")).newline();
                         currentImageIndex++;
                     }
                 } else {
                     // 策略2c: 无法提取文件名时，按索引分配
                     if (currentImageIndex < extractedImages.size()) {
                         ExtractedImage img = extractedImages.get(currentImageIndex);
-                        mb.append(img.toMarkdown("图片")).newline();
+                        mb.append(img.toMarkdown("Image")).newline();
                         currentImageIndex++;
                     }
                 }
@@ -268,43 +268,50 @@ public class DocxConverter implements DocumentConverter {
         }
         //根据样式处理标题
         String style = getStyle(document, paragraph);
+        boolean handled = false;
         if (style != null) {
-            switch (style) {
-                case "Title":
+            switch (style.toLowerCase(Locale.ROOT)) {
+                case "title":
                     mb.append(mb.heading(mb.escapeMarkdown(text), 1));
                     mb.horizontalRule();
+                    handled = true;
                     break;
                 case "heading 1":
                     mb.append(mb.heading(mb.escapeMarkdown(text), 2));
+                    handled = true;
                     break;
                 case "heading 2":
                     mb.append(mb.heading(mb.escapeMarkdown(text), 3));
+                    handled = true;
                     break;
                 case "heading 3":
                     mb.append(mb.heading(mb.escapeMarkdown(text), 4));
+                    handled = true;
                     break;
                 case "heading 4":
                     mb.append(mb.heading(mb.escapeMarkdown(text), 5));
+                    handled = true;
                     break;
                 case "heading 5":
                     mb.append(mb.heading(mb.escapeMarkdown(text), 6));
+                    handled = true;
                     break;
-                case "List Bullet":
+                case "list bullet":
                     mb.append(mb.unorder_item(mb.escapeMarkdown(text)));
+                    mb.newline(2);
+                    handled = true;
                     break;
-                case "List Number":
-                    // Todo: 如何获取文字
+                case "list number":
+                    mb.append("1. ").append(mb.escapeMarkdown(text));
+                    mb.newline(2);
+                    handled = true;
+                    break;
+                default:
                     break;
             }
+        }
 
-            // 处理列表项, 感觉缩进没必要搞
-//            if (isListItem(paragraph)) {
-//                String indent = getIndent(paragraph);
-//                markdown.append(indent).append("- ").append(text.trim()).append("\n");
-//                return;
-//            }
-
-            // 处理带格式化的普通段落
+        if (!handled) {
             mb.append(processParagraphFormatting(paragraph, text));
             mb.newline(2);
         }

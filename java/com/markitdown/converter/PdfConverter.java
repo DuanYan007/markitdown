@@ -5,7 +5,7 @@ import com.markitdown.api.DocumentConverter;
 import com.markitdown.config.ConversionOptions;
 import com.markitdown.exception.ConversionException;
 import com.markitdown.ocr.OcrEngine;
-import com.markitdown.ocr.TesseractOcrEngine;
+import com.markitdown.ocr.OcrEngineFactory;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.rendering.ImageType;
@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -36,6 +37,7 @@ public class PdfConverter implements DocumentConverter {
     public ConversionResult convert(Path filePath, ConversionOptions options) throws ConversionException {
         requireNonNull(filePath, "文件路径不能为空");
         requireNonNull(options, "转换选项不能为空");
+        configurePdfBoxFontCache();
 
         logger.info("正在转换PDF文件: {}", filePath);
 
@@ -148,7 +150,11 @@ public class PdfConverter implements DocumentConverter {
 
             // 创建OCR引擎，使用配置文件中的路径
             String tessdataPath = (String) options.getCustomOption("tessdataPath");
-            OcrEngine ocrEngine = tessdataPath != null ? new TesseractOcrEngine(tessdataPath) : new TesseractOcrEngine();
+            OcrEngine ocrEngine = OcrEngineFactory.create(options);
+            if (!ocrEngine.isAvailable()) {
+                return "*OCR engine is unavailable in the current build or environment.*\n\n" +
+                        "*Suggestion: use the full build or configure another OCR engine before enabling --ocr.*";
+            }
 
             for (int pageNum = 0; pageNum < document.getNumberOfPages(); pageNum++) {
                 logger.info("正在OCR识别第{}页...", pageNum + 1);
@@ -426,9 +432,9 @@ public class PdfConverter implements DocumentConverter {
         Map<String, Object> metadata = new HashMap<>();
 
         if (options.isIncludeMetadata()) {
-            metadata.put("文件名", pdfFile.getName());
-            metadata.put("文件大小", pdfFile.length());
-            metadata.put("转换时刻", LocalDateTime.now());
+            metadata.put("File Name", pdfFile.getName());
+            metadata.put("File Size", pdfFile.length());
+            metadata.put("Converted At", LocalDateTime.now());
 
             // 获取密码
             String password = (String) options.getCustomOption("pdfPassword");
@@ -436,7 +442,7 @@ public class PdfConverter implements DocumentConverter {
             try (PDDocument document = password != null && !password.isEmpty()
                     ? PDDocument.load(pdfFile, password)
                     : PDDocument.load(pdfFile)) {
-                metadata.put("页数", document.getNumberOfPages());
+                metadata.put("Pages", document.getNumberOfPages());
 
                 // 提取文档信息
                 if (document.getDocumentInformation() != null) {
@@ -447,12 +453,12 @@ public class PdfConverter implements DocumentConverter {
                     String creator = document.getDocumentInformation().getCreator();
                     String producer = document.getDocumentInformation().getProducer();
 
-                    if (title != null && !title.isEmpty()) metadata.put("标题", title);
-                    if (author != null && !author.isEmpty()) metadata.put("作者", author);
-                    if (subject != null && !subject.isEmpty()) metadata.put("主题", subject);
-                    if (keywords != null && !keywords.isEmpty()) metadata.put("关键词", keywords);
-                    if (creator != null && !creator.isEmpty()) metadata.put("创建工具", creator);
-                    if (producer != null && !producer.isEmpty()) metadata.put("PDF生成器", producer);
+                    if (title != null && !title.isEmpty()) metadata.put("Title", title);
+                    if (author != null && !author.isEmpty()) metadata.put("Author", author);
+                    if (subject != null && !subject.isEmpty()) metadata.put("Subject", subject);
+                    if (keywords != null && !keywords.isEmpty()) metadata.put("Keywords", keywords);
+                    if (creator != null && !creator.isEmpty()) metadata.put("Creator", creator);
+                    if (producer != null && !producer.isEmpty()) metadata.put("PDF Producer", producer);
                 }
             } catch (Exception e) {
                 logger.warn("无法读取PDF元数据: {}", e.getMessage());
@@ -627,10 +633,21 @@ public class PdfConverter implements DocumentConverter {
      * 格式化元数据键
      */
     private String formatMetadataKey(String key) {
-        // 将camelCase转换为Title Case
-        return key.replaceAll("([a-z])([A-Z])", "$1 $2")
-                .replaceAll("^([a-z])", String.valueOf(Character.toUpperCase(key.charAt(0))))
-                .toLowerCase();
+        return com.markdown.engine.MarkdownBuilder.prettifyMetadataKey(key);
+    }
+
+    private void configurePdfBoxFontCache() {
+        if (System.getProperty("pdfbox.fontcache") != null) {
+            return;
+        }
+
+        try {
+            Path cacheDir = Path.of(System.getProperty("java.io.tmpdir"), "markitdown-pdfbox-cache");
+            Files.createDirectories(cacheDir);
+            System.setProperty("pdfbox.fontcache", cacheDir.toAbsolutePath().toString());
+        } catch (IOException e) {
+            logger.debug("Unable to configure PDFBox font cache: {}", e.getMessage());
+        }
     }
 
     @Override

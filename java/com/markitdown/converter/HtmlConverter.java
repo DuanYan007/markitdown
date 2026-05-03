@@ -60,6 +60,10 @@ public class HtmlConverter implements DocumentConverter {
 
             // 提取元数据
             Map<String, Object> metadata = extractMetadata(document, options);
+            if (options.isIncludeMetadata()) {
+                metadata.put("File Name", filePath.getFileName().toString());
+                metadata.put("File Size", filePath.toFile().length());
+            }
 
             // 将HTML转换为Markdown
             String markdownContent = convertToMarkdown(document, metadata, options);
@@ -122,15 +126,15 @@ public class HtmlConverter implements DocumentConverter {
             // 提取标题
             String title = document.title();
             if (title != null && !title.trim().isEmpty()) {
-                metadata.put("文件名", title.trim());
+                metadata.put("Title", title.trim());
             }
 
             // 提取元标签
             Elements metaTags = document.select("meta");
             for (Element meta : metaTags) {
                 String name = meta.attr("name");
-                String property = meta.attr("属性");
-                String content = meta.attr("内容");
+                String property = meta.attr("property");
+                String content = meta.attr("content");
 
                 if (content != null && !content.trim().isEmpty()) {
                     if (name != null && !name.trim().isEmpty()) {
@@ -144,15 +148,15 @@ public class HtmlConverter implements DocumentConverter {
             // 提取语言信息
             String language = document.select("html").attr("lang");
             if (!language.isEmpty()) {
-                metadata.put("语言", language);
+                metadata.put("Language", language);
             }
 
             // 文档统计信息
-            metadata.put("标题数量", document.select("h1, h2, h3, h4, h5, h6").size());
-            metadata.put("链接数量", document.select("a[href]").size());
-            metadata.put("图片数量", document.select("img[src]").size());
-            metadata.put("表格数量", document.select("table").size());
-            metadata.put("转换时刻", LocalDateTime.now());
+            metadata.put("Heading Count", document.select("h1, h2, h3, h4, h5, h6").size());
+            metadata.put("Link Count", document.select("a[href]").size());
+            metadata.put("Image Count", document.select("img[src]").size());
+            metadata.put("Table Count", document.select("table").size());
+            metadata.put("Converted At", LocalDateTime.now());
         }
 
         return metadata;

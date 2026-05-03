@@ -1,55 +1,66 @@
 # MarkItDown
 
-English | [简体中文](README.md)
+English | [Chinese](README.md)
 
-Convert PDFs, Office documents, images, HTML, archives, and text files into Markdown for AI workflows, knowledge bases, and content pipelines.
+Convert PDFs, Office documents, images, HTML, archives, and text files into Markdown for AI preprocessing, knowledge bases, batch conversion, and content automation pipelines.
 
 ## Repository Layout
 
-This repository currently includes three subprojects:
+This repository currently contains three subprojects:
 
-1. `java/` - the main Java CLI and primary end-user deliverable
-2. `markitdown-mcp/` - an MCP server
+1. `java/` - the main Java CLI and the primary end-user deliverable
+2. `markitdown-mcp/` - an MCP server integration project
 3. `markitdown-web/` - an older web application path
 
-If you are new to the project, start with the Java CLI in [java/README.en.md](java/README.en.md).
+If you are new to the project, start with the Java CLI:
 
-## Features
+- [Java CLI Guide (Chinese)](java/README.md)
+- [Java CLI Guide (English)](java/README.en.md)
+
+## What It Can Do
 
 - Convert PDF, Word, Excel, PowerPoint, HTML, images, audio metadata, text, JSON, XML, CSV, and ZIP archives to Markdown
-- Extract text from scanned PDFs and images through pluggable OCR providers
-- Support multiple OCR backends including `tess4j`, `tesseract-cli`, and remote providers such as `paddleocr`
-- Produce smaller platform-focused artifacts with Maven profiles
-- Fit local automation, batch conversion, and AI preprocessing pipelines
+- Extract text from scanned PDFs and images through OCR
+- Support multiple OCR backends:
+  - `tess4j`
+  - `tesseract-cli`
+  - `paddleocr`
+  - `http`
+- Produce platform-specific artifacts with Maven profiles
+- Fit local automation, batch processing, and AI document preparation workflows
 
 ## Quick Start
 
-### Build from source
+### 1. Build from source
 
 ```bash
 mvn package -DskipTests
 ```
 
-### Build a specific artifact
+The default output is the lightweight CLI artifact.
+
+### 2. Build a specific artifact
 
 ```bash
 mvn package -DskipTests -Pfull
+mvn package -DskipTests -Pwin32
 mvn package -DskipTests -Pwin64
 mvn package -DskipTests -Plinux64
+mvn package -DskipTests -Pmac
 ```
 
-### Artifact profiles
+### 3. Artifact profiles
 
 | Profile | Artifact | Recommended usage |
 | --- | --- | --- |
 | `lite` | `markitdown4j-<version>-lite.jar` | Smallest package, no embedded `tess4j` |
-| `full` | `markitdown4j-<version>-full.jar` | Full embedded OCR resources |
+| `full` | `markitdown4j-<version>-full.jar` | Full OCR resources |
 | `win32` | `markitdown4j-<version>-win32.jar` | 32-bit Windows |
 | `win64` | `markitdown4j-<version>-win64.jar` | 64-bit Windows |
-| `linux64` | `markitdown4j-<version>-linux64.jar` | Linux with external OCR |
-| `mac` | `markitdown4j-<version>-mac.jar` | macOS with external OCR |
+| `linux64` | `markitdown4j-<version>-linux64.jar` | Linux with external or remote OCR |
+| `mac` | `markitdown4j-<version>-mac.jar` | macOS with external or remote OCR |
 
-### Example usage
+### 4. Example usage
 
 ```bash
 java -jar target/markitdown4j-0.0.3-lite.jar test/basic.txt -o out/basic.md
@@ -57,11 +68,11 @@ java -jar target/markitdown4j-0.0.3-win64.jar test/with-text.png --ocr --ocr-eng
 java -jar target/markitdown4j-0.0.3-lite.jar test/with-text.png --ocr --ocr-engine paddleocr -o out/paddle.md
 ```
 
-## OCR
+## OCR Configuration
 
-The project is moving toward a remote-first OCR model with unified user-facing configuration.
+The project uses a unified OCR configuration model so users can switch providers without changing the conversion flow.
 
-Example configuration:
+Example:
 
 ```properties
 ocr.enable=true
@@ -73,17 +84,17 @@ ocr.timeout=30000
 ocr.poll.interval=5000
 ```
 
-Current practical OCR options:
+Current practical options:
 
-- `tess4j`
-- `tesseract-cli`
-- `paddleocr`
-- `http`
+- `tess4j` for embedded Windows OCR
+- `tesseract-cli` for local Linux/macOS OCR
+- `paddleocr` for remote structured OCR
+- `http` for custom remote OCR integrations
 
 ## Documentation
 
-- [Java CLI Guide](java/README.en.md)
 - [Java CLI Guide (Chinese)](java/README.md)
+- [Java CLI Guide (English)](java/README.en.md)
 - [Command Reference](java/COMMAND_REFERENCE.md)
 - [OCR Provider Roadmap](OCR_PROVIDER_ROADMAP.md)
 

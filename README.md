@@ -1,60 +1,66 @@
 # MarkItDown
 
-[English](README.en.md) | 简体中文
+[English](README.en.md) | Chinese
 
-Convert PDFs, Office documents, images, HTML, archives, and text files into Markdown for AI workflows, knowledge bases, and content pipelines.
+将 PDF、Office 文档、图片、HTML、压缩包和文本文件转换为 Markdown，适用于 AI 预处理、知识库整理、批量文档转换和自动化内容流水线。
 
-## What This Repository Contains
+## 仓库结构
 
-This repository currently includes three subprojects:
+当前仓库包含三个子项目：
 
-1. `java/` - the main Java CLI and the primary end-user deliverable
-2. `markitdown-mcp/` - an MCP server for tool integration
-3. `markitdown-web/` - an older web application path
+1. `java/`：主线 Java CLI，也是当前主要交付物
+2. `markitdown-mcp/`：MCP 服务端集成项目
+3. `markitdown-web/`：较早期的 Web 应用方向
 
-If you are new to the project, start with the Java CLI in [java/README.md](java/README.md).
+如果你是第一次使用本项目，建议直接从 Java CLI 开始：
 
-## What MarkItDown Can Do
+- [Java CLI 中文文档](java/README.md)
+- [Java CLI English Guide](java/README.en.md)
 
-- Convert PDF, Word, Excel, PowerPoint, HTML, images, audio metadata, text, JSON, XML, CSV, and ZIP archives to Markdown
-- Extract text from scanned PDFs and images through pluggable OCR providers
-- Support multiple OCR backends including `tess4j`, `tesseract-cli`, and remote providers such as `paddleocr`
-- Produce smaller platform-focused artifacts with Maven profiles
-- Work well in local automation, batch conversion, and AI preprocessing pipelines
+## 可以做什么
 
-## Quick Start
+- 将 PDF、Word、Excel、PowerPoint、HTML、图片、音频元数据、文本、JSON、XML、CSV、ZIP 转为 Markdown
+- 对扫描版 PDF 和图片启用 OCR 文本提取
+- 支持多种 OCR 后端：
+  - `tess4j`
+  - `tesseract-cli`
+  - `paddleocr`
+  - `http`
+- 通过 Maven Profile 构建不同平台制品
+- 适用于本地自动化、批处理和 AI 文档预处理场景
 
-### Option 1: Build from source
+## 快速开始
+
+### 1. 从源码构建
 
 ```bash
 mvn package -DskipTests
 ```
 
-The default output is a lightweight Java CLI artifact.
+默认会生成轻量版 CLI 制品。
 
-### Option 2: Use a prebuilt Java CLI artifact
-
-Available profiles:
-
-| Profile | Artifact | Recommended usage |
-| --- | --- | --- |
-| `lite` | `markitdown4j-<version>-lite.jar` | Smallest package, no embedded `tess4j` |
-| `full` | `markitdown4j-<version>-full.jar` | Full embedded OCR resources |
-| `win32` | `markitdown4j-<version>-win32.jar` | 32-bit Windows |
-| `win64` | `markitdown4j-<version>-win64.jar` | 64-bit Windows |
-| `linux64` | `markitdown4j-<version>-linux64.jar` | Linux with external OCR |
-| `mac` | `markitdown4j-<version>-mac.jar` | macOS with external OCR |
-
-Build examples:
+### 2. 构建指定制品
 
 ```bash
-mvn package -DskipTests
 mvn package -DskipTests -Pfull
+mvn package -DskipTests -Pwin32
 mvn package -DskipTests -Pwin64
 mvn package -DskipTests -Plinux64
+mvn package -DskipTests -Pmac
 ```
 
-### Example usage
+### 3. 制品说明
+
+| Profile | 制品名 | 适用场景 |
+| --- | --- | --- |
+| `lite` | `markitdown4j-<version>-lite.jar` | 最小体积，不内置 `tess4j` |
+| `full` | `markitdown4j-<version>-full.jar` | 完整 OCR 资源 |
+| `win32` | `markitdown4j-<version>-win32.jar` | 32 位 Windows |
+| `win64` | `markitdown4j-<version>-win64.jar` | 64 位 Windows |
+| `linux64` | `markitdown4j-<version>-linux64.jar` | Linux，推荐外部或远程 OCR |
+| `mac` | `markitdown4j-<version>-mac.jar` | macOS，推荐外部或远程 OCR |
+
+### 4. 使用示例
 
 ```bash
 java -jar target/markitdown4j-0.0.3-lite.jar test/basic.txt -o out/basic.md
@@ -62,18 +68,11 @@ java -jar target/markitdown4j-0.0.3-win64.jar test/with-text.png --ocr --ocr-eng
 java -jar target/markitdown4j-0.0.3-lite.jar test/with-text.png --ocr --ocr-engine paddleocr -o out/paddle.md
 ```
 
-## OCR Strategy
+## OCR 配置
 
-The project is moving toward a remote-first OCR model with a unified configuration shape.
+项目当前采用统一配置方式接入 OCR，用户只需要切换配置，不需要改转换流程。
 
-Current practical options:
-
-- `tess4j` for Windows embedded OCR
-- `tesseract-cli` for local offline OCR
-- `paddleocr` for remote structured OCR
-- `http` for custom remote OCR integrations
-
-Example configuration:
+示例：
 
 ```properties
 ocr.enable=true
@@ -85,31 +84,25 @@ ocr.timeout=30000
 ocr.poll.interval=5000
 ```
 
-## Documentation
+当前推荐：
 
-Public documentation kept in this repository:
+- `tess4j`：适合 Windows 内嵌 OCR
+- `tesseract-cli`：适合 Linux / macOS 本地 OCR
+- `paddleocr`：适合远程结构化 OCR
+- `http`：适合接自定义远程 OCR 服务
 
-- [Java CLI Guide](java/README.md)
-- [Java CLI Guide (English)](java/README.en.md)
-- [Command Reference](java/COMMAND_REFERENCE.md)
-- [OCR Provider Roadmap](OCR_PROVIDER_ROADMAP.md)
+## 文档
 
-## Subprojects
+- [Java CLI 中文文档](java/README.md)
+- [Java CLI English Guide](java/README.en.md)
+- [命令参考](java/COMMAND_REFERENCE.md)
+- [OCR 扩展路线图](OCR_PROVIDER_ROADMAP.md)
 
-### Java CLI
+## 子项目
 
-The main delivery path. See:
-
-- [中文说明](java/README.md)
-- [English Guide](java/README.en.md)
-
-### MCP Server
-
-- [markitdown-mcp/README.md](markitdown-mcp/README.md)
-
-### Web App
-
-- [markitdown-web/readme.md](markitdown-web/readme.md)
+- [Java CLI](java/README.md)
+- [MCP Server](markitdown-mcp/README.md)
+- [Web App](markitdown-web/readme.md)
 
 ## License
 

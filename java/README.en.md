@@ -1,6 +1,6 @@
 # MarkItDown Java CLI
 
-English | [简体中文](README.md) | [Back to repository root](../README.md)
+[Chinese](README.md) | English | [Back to repository root](../README.md)
 
 `markitdown4j` is the main project in this repository. It is a Java command-line tool that converts common document formats into Markdown for AI preprocessing, knowledge-base workflows, batch archiving, and automation.
 
@@ -14,7 +14,7 @@ English | [简体中文](README.md) | [Back to repository root](../README.md)
 
 ## Requirements
 
-- Java 17+
+- Java 11+
 - Maven 3.9+ when building from source
 
 ## Quick Start
@@ -53,6 +53,7 @@ Build examples:
 ```bash
 mvn package -DskipTests
 mvn package -DskipTests -Pfull
+mvn package -DskipTests -Pwin32
 mvn package -DskipTests -Pwin64
 mvn package -DskipTests -Plinux64
 mvn package -DskipTests -Pmac
@@ -112,6 +113,7 @@ java -jar target/markitdown4j-0.0.3-lite.jar test/with-text.png --ocr --ocr-engi
 | Images | `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.tiff` |
 | Text | `.txt`, `.csv`, `.json`, `.xml` |
 | Archives | `.zip` |
+| Audio metadata | `.mp3`, `.wav`, `.flac` |
 
 ## Common Commands
 

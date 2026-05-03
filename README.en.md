@@ -2,11 +2,11 @@
 
 English | [Chinese](README.md)
 
-Convert PDFs, Office documents, images, HTML, archives, and text files into Markdown for AI preprocessing, knowledge bases, batch conversion, and content automation pipelines.
+Convert PDFs, Office documents, images, HTML, archives, and text files into Markdown for AI preprocessing, knowledge bases, batch conversion, and automation pipelines.
 
 ## Repository Layout
 
-This repository currently contains three subprojects:
+This repository currently contains three main subprojects:
 
 1. `java/` - the main Java CLI and the primary end-user deliverable
 2. `markitdown-mcp/` - an MCP server integration project
@@ -19,7 +19,7 @@ If you are new to the project, start with the Java CLI:
 
 ## What It Can Do
 
-- Convert PDF, Word, Excel, PowerPoint, HTML, images, audio metadata, text, JSON, XML, CSV, and ZIP archives to Markdown
+- Convert PDF, Word, Excel, PowerPoint, HTML, images, text, JSON, XML, CSV, and ZIP archives to Markdown
 - Extract text from scanned PDFs and images through OCR
 - Support multiple OCR backends:
   - `tess4j`
@@ -31,15 +31,15 @@ If you are new to the project, start with the Java CLI:
 
 ## Quick Start
 
-### 1. Build from source
+### Build from source
 
 ```bash
 mvn package -DskipTests
 ```
 
-The default output is the lightweight CLI artifact.
+The default output is the lightweight Java CLI artifact.
 
-### 2. Build a specific artifact
+### Build a specific artifact
 
 ```bash
 mvn package -DskipTests -Pfull
@@ -49,7 +49,7 @@ mvn package -DskipTests -Plinux64
 mvn package -DskipTests -Pmac
 ```
 
-### 3. Artifact profiles
+### Artifact profiles
 
 | Profile | Artifact | Recommended usage |
 | --- | --- | --- |
@@ -60,7 +60,7 @@ mvn package -DskipTests -Pmac
 | `linux64` | `markitdown4j-<version>-linux64.jar` | Linux with external or remote OCR |
 | `mac` | `markitdown4j-<version>-mac.jar` | macOS with external or remote OCR |
 
-### 4. Example usage
+### Example usage
 
 ```bash
 java -jar target/markitdown4j-0.0.3-lite.jar test/basic.txt -o out/basic.md

@@ -1,8 +1,8 @@
 # MarkItDown Java CLI
 
-[English](README.en.md) | 简体中文 | [返回仓库首页](../README.md)
+[English](README.en.md) | Chinese | [返回仓库首页](../README.md)
 
-`markitdown4j` 是当前仓库的主线项目。它是一个 Java 命令行工具，用来把常见文档格式转换成 Markdown，方便 AI 预处理、知识库整理、批量归档和自动化流程。
+`markitdown4j` 是当前仓库的主线项目。它是一个 Java 命令行工具，用来把常见文档格式转换成 Markdown，适合 AI 预处理、知识库整理、批量归档和自动化流程。
 
 ## 功能概览
 
@@ -14,7 +14,7 @@
 
 ## 环境要求
 
-- Java 17+
+- Java 11+
 - Maven 3.9+（从源码构建时）
 
 ## 快速开始
@@ -39,7 +39,7 @@ java -jar target/markitdown4j-0.0.3-lite.jar --help
 
 ## 制品与 Profile
 
-| Profile | 产物 | OCR 策略 | 适用场景 |
+| Profile | 产物 | OCR 策略 | 推荐场景 |
 | --- | --- | --- | --- |
 | `lite` | `markitdown4j-<version>-lite.jar` | 不内置 `tess4j` | 默认下载、CI、远程 OCR |
 | `full` | `markitdown4j-<version>-full.jar` | 内置完整 `tess4j` | Windows 一包即用 |
@@ -53,6 +53,7 @@ java -jar target/markitdown4j-0.0.3-lite.jar --help
 ```bash
 mvn package -DskipTests
 mvn package -DskipTests -Pfull
+mvn package -DskipTests -Pwin32
 mvn package -DskipTests -Pwin64
 mvn package -DskipTests -Plinux64
 mvn package -DskipTests -Pmac
@@ -112,6 +113,7 @@ java -jar target/markitdown4j-0.0.3-lite.jar test/with-text.png --ocr --ocr-engi
 | 图片 | `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.tiff` |
 | 文本 | `.txt`, `.csv`, `.json`, `.xml` |
 | 压缩包 | `.zip` |
+| 音频元数据 | `.mp3`, `.wav`, `.flac` |
 
 ## 常用命令
 

@@ -5,13 +5,13 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.markitdown</groupId>
-    <artifactId>markitdown-java</artifactId>
+    <artifactId>markitdown4j</artifactId>
     <version>0.0.3</version>
     <packaging>jar</packaging>
 
-    <name>MarkItDown Java</name>
-    <description>Java implementation of Microsoft MarkItDown - A powerful document to Markdown converter</description>
-    <url>https://github.com/yourusername/markitdown-java</url>
+    <name>markitdown4j</name>
+    <description>A Java CLI for converting documents to Markdown with pluggable OCR providers</description>
+    <url>https://github.com/DuanYan007/markitdown</url>
 
     <licenses>
         <license>
@@ -30,9 +30,9 @@
     </developers>
 
     <scm>
-        <connection>scm:git:git://github.com/DuanYan007/markitdown-java.git</connection>
-        <developerConnection>scm:git:ssh://github.com:DuanYan007/markitdown-java.git</developerConnection>
-        <url>https://github.com/DuanYan007/markitdown-java/tree/main</url>
+        <connection>scm:git:git://github.com/DuanYan007/markitdown.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/DuanYan007/markitdown.git</developerConnection>
+        <url>https://github.com/DuanYan007/markitdown/tree/master</url>
     </scm>
 
     <properties>

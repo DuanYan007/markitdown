@@ -2,13 +2,13 @@
 
 [English](README.en.md) | Chinese
 
-将 PDF、Office 文档、图片、HTML、压缩包和文本文件转换为 Markdown，适用于 AI 预处理、知识库整理、批量文档转换和自动化内容流水线。
+将 PDF、Office 文档、图片、HTML、压缩包和文本文件转换为 Markdown，适用于 AI 预处理、知识库整理、批量归档和自动化内容流水线。
 
 ## 仓库结构
 
-当前仓库包含三个子项目：
+当前仓库主要包含三个子项目：
 
-1. `java/`：主线 Java CLI，也是当前主要交付物
+1. `java/`：主线 Java CLI，也是当前推荐给最终用户的交付物
 2. `markitdown-mcp/`：MCP 服务端集成项目
 3. `markitdown-web/`：较早期的 Web 应用方向
 
@@ -17,9 +17,9 @@
 - [Java CLI 中文文档](java/README.md)
 - [Java CLI English Guide](java/README.en.md)
 
-## 可以做什么
+## 项目能力
 
-- 将 PDF、Word、Excel、PowerPoint、HTML、图片、音频元数据、文本、JSON、XML、CSV、ZIP 转为 Markdown
+- 将 PDF、Word、Excel、PowerPoint、HTML、图片、文本、JSON、XML、CSV、ZIP 转为 Markdown
 - 对扫描版 PDF 和图片启用 OCR 文本提取
 - 支持多种 OCR 后端：
   - `tess4j`
@@ -31,15 +31,15 @@
 
 ## 快速开始
 
-### 1. 从源码构建
+### 从源码构建
 
 ```bash
 mvn package -DskipTests
 ```
 
-默认会生成轻量版 CLI 制品。
+默认会生成轻量版 Java CLI 制品。
 
-### 2. 构建指定制品
+### 构建指定制品
 
 ```bash
 mvn package -DskipTests -Pfull
@@ -49,18 +49,18 @@ mvn package -DskipTests -Plinux64
 mvn package -DskipTests -Pmac
 ```
 
-### 3. 制品说明
+### 制品说明
 
-| Profile | 制品名 | 适用场景 |
+| Profile | 制品名 | 推荐场景 |
 | --- | --- | --- |
 | `lite` | `markitdown4j-<version>-lite.jar` | 最小体积，不内置 `tess4j` |
 | `full` | `markitdown4j-<version>-full.jar` | 完整 OCR 资源 |
 | `win32` | `markitdown4j-<version>-win32.jar` | 32 位 Windows |
 | `win64` | `markitdown4j-<version>-win64.jar` | 64 位 Windows |
-| `linux64` | `markitdown4j-<version>-linux64.jar` | Linux，推荐外部或远程 OCR |
-| `mac` | `markitdown4j-<version>-mac.jar` | macOS，推荐外部或远程 OCR |
+| `linux64` | `markitdown4j-<version>-linux64.jar` | Linux + 外部或远程 OCR |
+| `mac` | `markitdown4j-<version>-mac.jar` | macOS + 外部或远程 OCR |
 
-### 4. 使用示例
+### 使用示例
 
 ```bash
 java -jar target/markitdown4j-0.0.3-lite.jar test/basic.txt -o out/basic.md

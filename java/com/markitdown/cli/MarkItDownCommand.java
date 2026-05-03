@@ -47,18 +47,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Command(
         name = "markitdown",
         mixinStandardHelpOptions = true,
-        version = "MarkItDown-java 2.1.0",
-        description = "将各种文档格式转换为Markdown格式",
-        footerHeading = "示例:%n",
+        version = "markitdown4j 0.0.3",
+        description = "Convert documents to Markdown",
+        footerHeading = "Examples:%n",
         footer = {
-                "  markitdown document.pdf                       # 将PDF转换为Markdown",
-                "  markitdown document.docx -o output.md         # 将Word文档转换为output.md",
-                "  markitdown presentation.pptx --no-tables      # 转换PowerPoint不包含表格",
-                "  markitdown spreadsheet.xlsx --ocr             # 转换Excel并对图片使用OCR",
-                "  markitdown *.pdf                              # 转换目录下所有PDF文件",
-                "  markitdown *.pdf --parallel                   # 并行转换多个PDF文件",
-                "  cat document.pdf | markitdown                 # 管道输入转换",
-                "  curl -s http://example.com/doc.pdf | markitdown  # 从URL转换"
+                "  markitdown document.pdf                       # Convert a PDF to Markdown",
+                "  markitdown document.docx -o output.md         # Convert a Word document",
+                "  markitdown presentation.pptx --no-tables      # Convert a PowerPoint without tables",
+                "  markitdown spreadsheet.xlsx --ocr             # Convert an Excel file with OCR",
+                "  markitdown *.pdf                              # Convert all PDFs in the directory",
+                "  markitdown *.pdf --parallel                   # Convert multiple PDFs in parallel",
+                "  cat document.pdf | markitdown                 # Convert from stdin",
+                "  curl -s http://example.com/doc.pdf | markitdown  # Convert a remote document stream"
         }
 )
 public class MarkItDownCommand implements Callable<Integer> {
@@ -132,19 +132,19 @@ public class MarkItDownCommand implements Callable<Integer> {
 
     @Option(
             names = {"--ocr-engine"},
-            description = "OCR engine: tess4j, tesseract-cli, http, paddleocr, mock (default: tess4j)"
+            description = "OCR engine: tess4j, tesseract-cli, http, paddleocr (default: tess4j)"
     )
     private String ocrEngine;
 
     @Option(
             names = {"--ocr-endpoint"},
-            description = "HTTP OCR endpoint"
+            description = "Remote OCR endpoint"
     )
     private String ocrEndpoint;
 
     @Option(
             names = {"--ocr-api-key"},
-            description = "HTTP OCR API key"
+            description = "Remote OCR API key or token"
     )
     private String ocrApiKey;
 

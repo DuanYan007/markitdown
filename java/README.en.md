@@ -28,13 +28,13 @@ mvn package -DskipTests
 ### 2. Run
 
 ```bash
-java -jar target/markitdown4j-1.0.0-SNAPSHOT-lite.jar test/basic.txt -o out/basic.md
+java -jar target/markitdown4j-0.0.3-lite.jar test/basic.txt -o out/basic.md
 ```
 
 ### 3. Help
 
 ```bash
-java -jar target/markitdown4j-1.0.0-SNAPSHOT-lite.jar --help
+java -jar target/markitdown4j-0.0.3-lite.jar --help
 ```
 
 ## Artifact Profiles
@@ -92,13 +92,13 @@ ocr.language=auto
 
 ```bash
 # Windows embedded OCR
-java -jar target/markitdown4j-1.0.0-SNAPSHOT-win64.jar test/with-text.png --ocr --ocr-engine tess4j -o out/ocr.md
+java -jar target/markitdown4j-0.0.3-win64.jar test/with-text.png --ocr --ocr-engine tess4j -o out/ocr.md
 
 # Linux / macOS local OCR
-java -jar target/markitdown4j-1.0.0-SNAPSHOT-linux64.jar test/with-text.png --ocr --ocr-engine tesseract-cli -o out/ocr.md
+java -jar target/markitdown4j-0.0.3-linux64.jar test/with-text.png --ocr --ocr-engine tesseract-cli -o out/ocr.md
 
 # Remote PaddleOCR
-java -jar target/markitdown4j-1.0.0-SNAPSHOT-lite.jar test/with-text.png --ocr --ocr-engine paddleocr -o out/paddle.md
+java -jar target/markitdown4j-0.0.3-lite.jar test/with-text.png --ocr --ocr-engine paddleocr -o out/paddle.md
 ```
 
 ## Supported Formats
@@ -118,13 +118,13 @@ java -jar target/markitdown4j-1.0.0-SNAPSHOT-lite.jar test/with-text.png --ocr -
 
 ```bash
 # PDF to Markdown
-java -jar target/markitdown4j-1.0.0-SNAPSHOT-lite.jar test/plain-text.pdf -o out/plain-text.md
+java -jar target/markitdown4j-0.0.3-lite.jar test/plain-text.pdf -o out/plain-text.md
 
 # Word to Markdown
-java -jar target/markitdown4j-1.0.0-SNAPSHOT-lite.jar test/basic.docx -o out/basic.md
+java -jar target/markitdown4j-0.0.3-lite.jar test/basic.docx -o out/basic.md
 
 # Batch processing
-java -jar target/markitdown4j-1.0.0-SNAPSHOT-lite.jar test --batch -o out/
+java -jar target/markitdown4j-0.0.3-lite.jar test --batch -o out/
 ```
 
 ## Documentation

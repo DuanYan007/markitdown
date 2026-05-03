@@ -106,3 +106,5 @@ test.md
 
 # Local smoke and manual verification outputs
 smoke-out/
+_release_build/
+_release_build_2/

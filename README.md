@@ -57,9 +57,9 @@ mvn package -DskipTests -Plinux64
 ### Example usage
 
 ```bash
-java -jar target/markitdown4j-1.0.0-SNAPSHOT-lite.jar test/basic.txt -o out/basic.md
-java -jar target/markitdown4j-1.0.0-SNAPSHOT-win64.jar test/with-text.png --ocr --ocr-engine tess4j -o out/ocr.md
-java -jar target/markitdown4j-1.0.0-SNAPSHOT-lite.jar test/with-text.png --ocr --ocr-engine paddleocr -o out/paddle.md
+java -jar target/markitdown4j-0.0.3-lite.jar test/basic.txt -o out/basic.md
+java -jar target/markitdown4j-0.0.3-win64.jar test/with-text.png --ocr --ocr-engine tess4j -o out/ocr.md
+java -jar target/markitdown4j-0.0.3-lite.jar test/with-text.png --ocr --ocr-engine paddleocr -o out/paddle.md
 ```
 
 ## OCR Strategy

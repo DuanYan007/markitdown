@@ -43,9 +43,20 @@ Last updated: 2026-05-02
   - [TesseractCliOcrEngine.java](/O:/markitdown/java/com/markitdown/ocr/TesseractCliOcrEngine.java)
   - [HttpOcrEngine.java](/O:/markitdown/java/com/markitdown/ocr/HttpOcrEngine.java)
   - [MockOcrEngine.java](/O:/markitdown/java/com/markitdown/ocr/MockOcrEngine.java)
+  - [PaddleOcrEngine.java](/O:/markitdown/java/com/markitdown/ocr/PaddleOcrEngine.java)
 - Main flow callers that were decoupled from direct tess4j usage:
   - [ImageConverter.java](/O:/markitdown/java/com/markitdown/converter/ImageConverter.java)
   - [PdfConverter.java](/O:/markitdown/java/com/markitdown/converter/PdfConverter.java)
+
+## OCR roadmap
+
+- The current project direction is remote-first OCR providers with a unified user-facing configuration model.
+- Reference roadmap: [OCR_PROVIDER_ROADMAP.md](/O:/markitdown/OCR_PROVIDER_ROADMAP.md)
+- Current remote provider proven by real-service integration:
+  - `paddleocr`
+- Current fallback/local providers still worth keeping:
+  - `tesseract-cli`
+  - `mock`
 
 ## Packaging strategy after 2026-05 refactor
 

@@ -132,7 +132,7 @@ public class MarkItDownCommand implements Callable<Integer> {
 
     @Option(
             names = {"--ocr-engine"},
-            description = "OCR engine: tess4j, tesseract-cli, http, mock (default: tess4j)"
+            description = "OCR engine: tess4j, tesseract-cli, http, paddleocr, mock (default: tess4j)"
     )
     private String ocrEngine;
 
@@ -149,10 +149,22 @@ public class MarkItDownCommand implements Callable<Integer> {
     private String ocrApiKey;
 
     @Option(
+            names = {"--ocr-model"},
+            description = "OCR model name for remote providers"
+    )
+    private String ocrModel;
+
+    @Option(
             names = {"--ocr-timeout"},
             description = "OCR timeout in milliseconds"
     )
     private int ocrTimeout;
+
+    @Option(
+            names = {"--ocr-poll-interval"},
+            description = "OCR polling interval in milliseconds for async providers"
+    )
+    private int ocrPollInterval;
 
     // ==================== 格式选项 ====================
 
@@ -831,8 +843,12 @@ public class MarkItDownCommand implements Callable<Integer> {
             configManager.getOcrEndpoint();
         String ocrApiKeyConfig = this.ocrApiKey != null ? this.ocrApiKey :
             configManager.getOcrApiKey();
+        String ocrModelConfig = this.ocrModel != null ? this.ocrModel :
+            configManager.getOcrModel();
         int ocrTimeoutConfig = this.ocrTimeout > 0 ? this.ocrTimeout :
             configManager.getOcrTimeout();
+        int ocrPollIntervalConfig = this.ocrPollInterval > 0 ? this.ocrPollInterval :
+            configManager.getOcrPollInterval();
 
         // Format options with precedence
         String tableFormatConfig = this.tableFormat != null ? this.tableFormat :
@@ -865,7 +881,9 @@ public class MarkItDownCommand implements Callable<Integer> {
                .ocrEngine(ocrEngineConfig)
                .ocrEndpoint(ocrEndpointConfig)
                .ocrApiKey(ocrApiKeyConfig)
+               .ocrModel(ocrModelConfig)
                .ocrTimeout(ocrTimeoutConfig)
+               .ocrPollInterval(ocrPollIntervalConfig)
                .tableFormat(tableFormatConfig)
                .imageFormat(imageFormatConfig)
                .imageOutputDir(imageOutputDirConfig)

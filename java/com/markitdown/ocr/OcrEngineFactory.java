@@ -17,7 +17,9 @@ public final class OcrEngineFactory {
         register(new Tess4jOcrProvider());
         register(new TesseractCliOcrProvider());
         register(new HttpOcrProvider());
+        register(new PaddleOcrProvider());
         register(new MockOcrProvider());
+        alias("paddle-ocr", "paddleocr");
     }
 
     private OcrEngineFactory() {
@@ -26,6 +28,13 @@ public final class OcrEngineFactory {
     public static void register(OcrProvider provider) {
         Objects.requireNonNull(provider, "provider cannot be null");
         PROVIDERS.put(provider.getName().toLowerCase(), provider);
+    }
+
+    private static void alias(String alias, String existingProviderName) {
+        OcrProvider provider = PROVIDERS.get(existingProviderName.toLowerCase());
+        if (provider != null) {
+            PROVIDERS.put(alias.toLowerCase(), provider);
+        }
     }
 
     public static OcrEngine create(ConversionOptions options) {

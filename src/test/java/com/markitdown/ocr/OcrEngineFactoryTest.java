@@ -48,4 +48,31 @@ class OcrEngineFactoryTest {
         tempFile.deleteOnExit();
         assertTrue(engine.extractText(tempFile).contains("Sample OCR Result"));
     }
+
+    @Test
+    void returnsUnavailableEngineWhenPaddleTokenIsMissing() {
+        ConversionOptions options = ConversionOptions.builder()
+                .useOcr(true)
+                .ocrEngine("paddleocr")
+                .build();
+
+        OcrEngine engine = OcrEngineFactory.create(options);
+
+        assertFalse(engine.isAvailable());
+        assertEquals("UnavailableOCR", engine.getEngineName());
+    }
+
+    @Test
+    void createsPaddleEngineWhenTokenIsConfigured() {
+        ConversionOptions options = ConversionOptions.builder()
+                .useOcr(true)
+                .ocrEngine("paddleocr")
+                .ocrApiKey("secret-token")
+                .build();
+
+        OcrEngine engine = OcrEngineFactory.create(options);
+
+        assertTrue(engine.isAvailable());
+        assertEquals("PaddleOCR", engine.getEngineName());
+    }
 }

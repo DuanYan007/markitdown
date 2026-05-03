@@ -83,7 +83,9 @@ public class ConfigurationManager {
         props.setProperty("ocr.language", "auto");
         props.setProperty("ocr.endpoint", "");
         props.setProperty("ocr.api.key", "");
+        props.setProperty("ocr.model", "");
         props.setProperty("ocr.timeout", "30000");
+        props.setProperty("ocr.poll.interval", "5000");
 
         // 格式化默认值
         props.setProperty("format.image", "markdown");
@@ -162,6 +164,56 @@ public class ConfigurationManager {
         String tempDir = System.getenv("MARKITDOWN_TEMP_DIR");
         if (tempDir != null) {
             props.setProperty("output.temp.dir", tempDir);
+        }
+
+        String ocrEngine = System.getenv("MARKITDOWN_OCR_ENGINE");
+        if (ocrEngine != null) {
+            props.setProperty("ocr.engine", ocrEngine);
+        }
+
+        String ocrEndpoint = System.getenv("MARKITDOWN_OCR_ENDPOINT");
+        if (ocrEndpoint != null) {
+            props.setProperty("ocr.endpoint", ocrEndpoint);
+        }
+
+        String ocrApiKey = System.getenv("MARKITDOWN_OCR_API_KEY");
+        if (ocrApiKey != null) {
+            props.setProperty("ocr.api.key", ocrApiKey);
+        }
+
+        String ocrModel = System.getenv("MARKITDOWN_OCR_MODEL");
+        if (ocrModel != null) {
+            props.setProperty("ocr.model", ocrModel);
+        }
+
+        String ocrTimeout = System.getenv("MARKITDOWN_OCR_TIMEOUT");
+        if (ocrTimeout != null) {
+            props.setProperty("ocr.timeout", ocrTimeout);
+        }
+
+        String ocrPollInterval = System.getenv("MARKITDOWN_OCR_POLL_INTERVAL");
+        if (ocrPollInterval != null) {
+            props.setProperty("ocr.poll.interval", ocrPollInterval);
+        }
+
+        String paddleToken = System.getenv("PADDLE_OCR_TOKEN");
+        if (paddleToken != null) {
+            props.setProperty("ocr.api.key", paddleToken);
+        }
+
+        String paddleJobUrl = System.getenv("PADDLE_OCR_JOB_URL");
+        if (paddleJobUrl != null) {
+            props.setProperty("ocr.endpoint", paddleJobUrl);
+        }
+
+        String paddleModel = System.getenv("PADDLE_OCR_MODEL");
+        if (paddleModel != null) {
+            props.setProperty("ocr.model", paddleModel);
+        }
+
+        String paddlePollInterval = System.getenv("PADDLE_OCR_POLL_INTERVAL_MS");
+        if (paddlePollInterval != null) {
+            props.setProperty("ocr.poll.interval", paddlePollInterval);
         }
     }
 
@@ -437,7 +489,9 @@ public class ConfigurationManager {
                .ocrEngine(getProperty("ocr.engine", "tess4j"))
                .ocrEndpoint(getProperty("ocr.endpoint", ""))
                .ocrApiKey(getProperty("ocr.api.key", ""))
-               .ocrTimeout(getIntProperty("ocr.timeout", 30000));
+               .ocrModel(getProperty("ocr.model", ""))
+               .ocrTimeout(getIntProperty("ocr.timeout", 30000))
+               .ocrPollInterval(getIntProperty("ocr.poll.interval", 5000));
 
         // 格式选项
         builder.imageFormat(getProperty("format.image", "markdown"))
@@ -477,6 +531,14 @@ public class ConfigurationManager {
 
     public int getOcrTimeout() {
         return getIntProperty("ocr.timeout", 30000);
+    }
+
+    public String getOcrModel() {
+        return getProperty("ocr.model", "");
+    }
+
+    public int getOcrPollInterval() {
+        return getIntProperty("ocr.poll.interval", 5000);
     }
 
     /**

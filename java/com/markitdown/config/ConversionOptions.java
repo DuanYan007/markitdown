@@ -96,10 +96,12 @@ public class ConversionOptions {
      * @brief HTTP OCR服务认证信息
      */
     private String ocrApiKey;
+    private String ocrModel;
     /**
      * @brief OCR超时时间（毫秒）
      */
     private int ocrTimeout = 30000;
+    private int ocrPollInterval = 5000;
     /**
      * @brief 自定义选项映射
      * @details 存储特定转换器的自定义配置选项
@@ -132,7 +134,9 @@ public class ConversionOptions {
         this.ocrEngine = other.ocrEngine;
         this.ocrEndpoint = other.ocrEndpoint;
         this.ocrApiKey = other.ocrApiKey;
+        this.ocrModel = other.ocrModel;
         this.ocrTimeout = other.ocrTimeout;
+        this.ocrPollInterval = other.ocrPollInterval;
         this.customOptions = new HashMap<>(other.customOptions);
     }
 
@@ -385,12 +389,30 @@ public class ConversionOptions {
         return this;
     }
 
+    public String getOcrModel() {
+        return ocrModel;
+    }
+
+    public ConversionOptions setOcrModel(String ocrModel) {
+        this.ocrModel = ocrModel;
+        return this;
+    }
+
     public int getOcrTimeout() {
         return ocrTimeout;
     }
 
     public ConversionOptions setOcrTimeout(int ocrTimeout) {
         this.ocrTimeout = ocrTimeout;
+        return this;
+    }
+
+    public int getOcrPollInterval() {
+        return ocrPollInterval;
+    }
+
+    public ConversionOptions setOcrPollInterval(int ocrPollInterval) {
+        this.ocrPollInterval = ocrPollInterval;
         return this;
     }
 
@@ -513,8 +535,18 @@ public class ConversionOptions {
             return this;
         }
 
+        public Builder ocrModel(String ocrModel) {
+            options.setOcrModel(ocrModel);
+            return this;
+        }
+
         public Builder ocrTimeout(int ocrTimeout) {
             options.setOcrTimeout(ocrTimeout);
+            return this;
+        }
+
+        public Builder ocrPollInterval(int ocrPollInterval) {
+            options.setOcrPollInterval(ocrPollInterval);
             return this;
         }
 

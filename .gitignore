@@ -103,3 +103,6 @@ PDF_FIX_REPORT.md
 REFACTORING_STATUS.md
 SOLUTION_SUMMARY.md
 test.md
+
+# Local smoke and manual verification outputs
+smoke-out/

@@ -290,6 +290,6 @@ Suggested semantics:
 
 ## Notes
 
-- `tesseract-cli` and `mock` should remain as fallback providers
+- `tesseract-cli` should remain as a fallback provider
 - Remote-first does not mean remote-only; offline fallback still matters
 - Providers that already return Markdown should be prioritized because they align well with the project goal

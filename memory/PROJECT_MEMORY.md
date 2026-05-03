@@ -36,13 +36,11 @@ Last updated: 2026-05-02
 - Implemented providers:
   - [Tess4jOcrProvider.java](/O:/markitdown/java/com/markitdown/ocr/Tess4jOcrProvider.java)
   - [TesseractCliOcrProvider.java](/O:/markitdown/java/com/markitdown/ocr/TesseractCliOcrProvider.java)
-  - [MockOcrProvider.java](/O:/markitdown/java/com/markitdown/ocr/MockOcrProvider.java)
   - [HttpOcrProvider.java](/O:/markitdown/java/com/markitdown/ocr/HttpOcrProvider.java)
 - Implemented engines:
   - [TesseractOcrEngine.java](/O:/markitdown/java/com/markitdown/ocr/TesseractOcrEngine.java)
   - [TesseractCliOcrEngine.java](/O:/markitdown/java/com/markitdown/ocr/TesseractCliOcrEngine.java)
   - [HttpOcrEngine.java](/O:/markitdown/java/com/markitdown/ocr/HttpOcrEngine.java)
-  - [MockOcrEngine.java](/O:/markitdown/java/com/markitdown/ocr/MockOcrEngine.java)
   - [PaddleOcrEngine.java](/O:/markitdown/java/com/markitdown/ocr/PaddleOcrEngine.java)
 - Main flow callers that were decoupled from direct tess4j usage:
   - [ImageConverter.java](/O:/markitdown/java/com/markitdown/converter/ImageConverter.java)
@@ -56,7 +54,6 @@ Last updated: 2026-05-02
   - `paddleocr`
 - Current fallback/local providers still worth keeping:
   - `tesseract-cli`
-  - `mock`
 
 ## Packaging strategy after 2026-05 refactor
 

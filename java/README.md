@@ -66,7 +66,6 @@ mvn package -DskipTests -Pmac
 - `tesseract-cli`
 - `paddleocr`
 - `http`
-- `mock`
 
 推荐组合：
 

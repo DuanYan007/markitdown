@@ -66,7 +66,6 @@ Available OCR engines:
 - `tesseract-cli`
 - `paddleocr`
 - `http`
-- `mock`
 
 Recommended pairings:
 

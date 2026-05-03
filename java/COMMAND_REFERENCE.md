@@ -47,7 +47,7 @@ java -jar markitdown4j.jar docs --batch -o out/
 | --- | --- |
 | `--ocr` | Enable OCR |
 | `-l`, `--language <lang>` | OCR language, for example `auto`, `eng`, `chi_sim` |
-| `--ocr-engine <engine>` | OCR backend: `tess4j`, `tesseract-cli`, `paddleocr`, `http`, `mock` |
+| `--ocr-engine <engine>` | OCR backend: `tess4j`, `tesseract-cli`, `paddleocr`, `http` |
 | `--ocr-endpoint <url>` | Remote OCR endpoint |
 | `--ocr-api-key <key>` | Remote OCR API key or token |
 | `--ocr-model <model>` | Remote OCR model name |

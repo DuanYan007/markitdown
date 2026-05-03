@@ -51,7 +51,6 @@ Read this first before editing the repo.
 - Supported engines:
   - `tess4j`
   - `tesseract-cli`
-  - `mock`
   - `http`
 - Recommended operational path:
   - Windows: `tess4j`

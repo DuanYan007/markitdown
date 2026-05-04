@@ -1,76 +1,49 @@
-# MarkItDown
+# markitdown
 
-English | [Chinese](README.md)
+[中文](README.md) | [English](README.en.md)
 
-Convert PDFs, Office documents, images, HTML, archives, and text files into Markdown for AI preprocessing, knowledge bases, batch conversion, and automation pipelines.
+`markitdown` is a document-to-Markdown repository. The primary deliverable today is the `markitdown4j` Java CLI, which converts common office documents, web pages, images, archives, and some audio metadata into Markdown, with OCR support through a unified configuration model.
 
-## Repository Layout
+## What this project can do
 
-This repository currently contains three main subprojects:
+- Convert PDF, Word, Excel, PowerPoint, HTML, images, text, and ZIP files into Markdown
+- Use OCR for images and scanned PDFs
+- Provide platform-focused artifacts: `lite`, `full`, `win32`, `win64`, `linux64`, `mac`
+- Let users switch OCR backends without changing the conversion flow
+- Support remote OCR providers such as `paddleocr`
 
-1. `java/` - the main Java CLI and the primary end-user deliverable
-2. `markitdown-mcp/` - an MCP server integration project
-3. `markitdown-web/` - an older web application path
+## Repository layout
 
-If you are new to the project, start with the Java CLI:
+- [java/README.en.md](java/README.en.md): Java CLI guide
+- [java/COMMAND_REFERENCE.md](java/COMMAND_REFERENCE.md): command and parameter reference
+- [test/README.md](test/README.md): test dataset and validation notes
+- [OCR_PROVIDER_ROADMAP.md](OCR_PROVIDER_ROADMAP.md): OCR / VLM roadmap
+- [memory/PROJECT_MEMORY.md](memory/PROJECT_MEMORY.md): project memory
 
-- [Java CLI Guide (Chinese)](java/README.md)
-- [Java CLI Guide (English)](java/README.en.md)
+## Quick start
 
-## What It Can Do
+1. Install Java 11 or later
+2. Download the artifact that matches your platform
+3. Run a conversion command
 
-- Convert PDF, Word, Excel, PowerPoint, HTML, images, text, JSON, XML, CSV, and ZIP archives to Markdown
-- Extract text from scanned PDFs and images through OCR
-- Support multiple OCR backends:
-  - `tess4j`
-  - `tesseract-cli`
-  - `paddleocr`
-  - `http`
-- Produce platform-specific artifacts with Maven profiles
-- Fit local automation, batch processing, and AI document preparation workflows
-
-## Quick Start
-
-### Build from source
+Example:
 
 ```bash
-mvn package -DskipTests
+java -jar target/markitdown4j-0.0.3-lite.jar document.pdf -o output.md
 ```
 
-The default output is the lightweight Java CLI artifact.
+## Which artifact should I download?
 
-### Build a specific artifact
-
-```bash
-mvn package -DskipTests -Pfull
-mvn package -DskipTests -Pwin32
-mvn package -DskipTests -Pwin64
-mvn package -DskipTests -Plinux64
-mvn package -DskipTests -Pmac
-```
-
-### Artifact profiles
-
-| Profile | Artifact | Recommended usage |
-| --- | --- | --- |
-| `lite` | `markitdown4j-<version>-lite.jar` | Smallest package, no embedded `tess4j` |
-| `full` | `markitdown4j-<version>-full.jar` | Full OCR resources |
-| `win32` | `markitdown4j-<version>-win32.jar` | 32-bit Windows |
-| `win64` | `markitdown4j-<version>-win64.jar` | 64-bit Windows |
-| `linux64` | `markitdown4j-<version>-linux64.jar` | Linux with external or remote OCR |
-| `mac` | `markitdown4j-<version>-mac.jar` | macOS with external or remote OCR |
-
-### Example usage
-
-```bash
-java -jar target/markitdown4j-0.0.3-lite.jar test/basic.txt -o out/basic.md
-java -jar target/markitdown4j-0.0.3-win64.jar test/with-text.png --ocr --ocr-engine tess4j -o out/ocr.md
-java -jar target/markitdown4j-0.0.3-lite.jar test/with-text.png --ocr --ocr-engine paddleocr -o out/paddle.md
-```
+- `win64`: 64-bit Windows with embedded Windows OCR natives
+- `win32`: 32-bit Windows with embedded Windows OCR natives
+- `linux64`: Linux, recommended with local or remote OCR
+- `mac`: macOS, recommended with local or remote OCR
+- `lite`: smallest package, no embedded `tess4j`
+- `full`: full package with complete OCR resources
 
 ## OCR Configuration
 
-The project uses a unified OCR configuration model so users can switch providers without changing the conversion flow.
+The project uses a unified OCR configuration model. Users do not need to learn a different config shape for every OCR backend; they only switch values in the same set of fields.
 
 Example:
 
@@ -82,28 +55,52 @@ ocr.api.key=YOUR_TOKEN
 ocr.model=PaddleOCR-VL-1.5
 ocr.timeout=30000
 ocr.poll.interval=5000
+ocr.language=auto
 ```
 
-Current practical options:
+Configuration file:
 
-- `tess4j` for embedded Windows OCR
-- `tesseract-cli` for local Linux/macOS OCR
-- `paddleocr` for remote structured OCR
-- `http` for custom remote OCR integrations
+- [`.markitdown.properties`](.markitdown.properties)
+
+Shared OCR fields:
+
+- `ocr.enable`
+- `ocr.engine`
+- `ocr.endpoint`
+- `ocr.api.key`
+- `ocr.model`
+- `ocr.timeout`
+- `ocr.poll.interval`
+- `ocr.language`
+
+Configuration precedence:
+
+1. CLI arguments such as `--ocr-engine`
+2. Environment variables such as `MARKITDOWN_OCR_ENGINE`
+3. [`.markitdown.properties`](.markitdown.properties)
+4. Built-in defaults
+
+Common environment variables:
+
+- `MARKITDOWN_OCR_ENGINE`
+- `MARKITDOWN_OCR_ENDPOINT`
+- `MARKITDOWN_OCR_API_KEY`
+- `MARKITDOWN_OCR_MODEL`
+- `MARKITDOWN_OCR_TIMEOUT`
+- `MARKITDOWN_OCR_POLL_INTERVAL`
+
+Public OCR backends:
+
+- `tess4j`: embedded OCR for Windows
+- `tesseract-cli`: local OCR for Linux / macOS
+- `paddleocr`: remote structured OCR
+- `http`: custom remote OCR integrations
 
 ## Testing and Validation
 
-The project currently validates behavior at three levels:
+This project does not only describe features; it also ships reusable test assets and documented validation paths.
 
-### 1. Automated tests
-
-The `mvn test` suite currently covers:
-
-- Profile build and naming checks
-- OCR engine factory selection
-- PaddleOCR response parsing
-- Streaming text conversion
-- ZIP delegation and nested conversion behavior
+### Automated tests
 
 Run:
 
@@ -111,51 +108,44 @@ Run:
 mvn test
 ```
 
-### 2. Sample file coverage
+Current coverage includes:
 
-The repository includes [`test/test.zip`](test/test.zip), which is the full packaged test dataset. It currently contains about 104 files and serves as the main regression, compatibility, and pre-release manual verification asset.
+- Profile build and naming checks
+- OCR engine factory selection
+- PaddleOCR response parsing
+- Streaming text conversion
+- ZIP delegation and nested conversion behavior
 
-The extracted [`test/`](test/README.md) directory is provided for browsing and running file-level verification commands. It covers:
+### Test dataset
 
-- PDF
-- Word
-- Excel
-- PowerPoint
-- Image OCR
-- Audio metadata
-- HTML
-- JSON / XML / CSV / TXT
-- ZIP archives and nested archives
-- Large files, empty files, encrypted files, and multilingual files
+[test/test.zip](test/test.zip) is the packaged test dataset for this repository. It currently contains about 104 test files and is used for:
 
-### 3. Release smoke validation
+- regression testing
+- compatibility checks
+- pre-release manual validation
 
-Before `v0.0.3`, the following key paths were exercised in real runs:
+The extracted [test/README.md](test/README.md) explains how to use the dataset.
 
-- `lite` basic text conversion
-- `win64 + tess4j` OCR
-- `linux64 + tesseract-cli` OCR
-- `lite + paddleocr` remote OCR
-- PDF / DOCX / XLSX / HTML / ZIP / audio metadata conversion
+### Verified paths
 
-For concrete examples, start with:
-
-- [`test/test.zip`](test/test.zip)
-- [`test/README.md`](test/README.md)
+- `lite` basic conversion
+- `win64 + tess4j`
+- `linux64 + tesseract-cli`
+- `lite + paddleocr`
 
 ## Documentation
 
-- [Java CLI Guide (Chinese)](java/README.md)
-- [Java CLI Guide (English)](java/README.en.md)
+- [Java CLI Guide (CN)](java/README.md)
+- [Java CLI Guide (EN)](java/README.en.md)
 - [Command Reference](java/COMMAND_REFERENCE.md)
-- [OCR Provider Roadmap](OCR_PROVIDER_ROADMAP.md)
+- [Test Guide](test/README.md)
+- [OCR Roadmap](OCR_PROVIDER_ROADMAP.md)
 
-## Subprojects
+## Other subprojects
 
-- [Java CLI](java/README.en.md)
-- [MCP Server](markitdown-mcp/README.md)
-- [Web App](markitdown-web/readme.md)
+- `markitdown-mcp`: MCP-related content
+- `markitdown-web`: historical web-direction experiment, not the primary delivery path
 
 ## License
 
-[MIT](LICENSE)
+See the repository license file or future release notes for the active license.

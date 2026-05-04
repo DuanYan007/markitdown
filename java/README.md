@@ -1,81 +1,73 @@
-# MarkItDown Java CLI
+# markitdown4j
 
-[English](README.en.md) | Chinese | [返回仓库首页](../README.md)
+[中文](README.md) | [English](README.en.md)
 
-`markitdown4j` 是当前仓库的主线项目。它是一个 Java 命令行工具，用来把常见文档格式转换成 Markdown，适合 AI 预处理、知识库整理、批量归档和自动化流程。
+`markitdown4j` 是当前仓库的主线交付物。它是一个 Java CLI，用于将常见文档和文件内容转换为 Markdown，并在需要时通过统一配置调用不同 OCR 后端。
 
-## 功能概览
+## 功能
 
-- 支持 PDF、Word、Excel、PowerPoint、HTML、图片、文本、JSON、XML、CSV、ZIP
-- 支持扫描版 PDF 和图片 OCR
-- 支持可插拔 OCR 后端
-- 支持平台化打包和轻量化制品
-- 支持批量、递归、并行转换
+- 多格式转 Markdown
+- OCR 可插拔
+- 平台化制品构建
+- 批量、递归、并行处理
+- 统一配置和统一命令行入口
 
 ## 环境要求
 
 - Java 11+
-- Maven 3.9+（从源码构建时）
+- Maven 3.8+
 
 ## 快速开始
 
-### 1. 构建
+构建：
 
 ```bash
 mvn package -DskipTests
 ```
 
-### 2. 运行
+最小运行示例：
 
 ```bash
-java -jar target/markitdown4j-0.0.3-lite.jar test/basic.txt -o out/basic.md
+java -jar target/markitdown4j-0.0.3-lite.jar document.pdf -o output.md
 ```
 
-### 3. 查看帮助
+## 发布制品
 
-```bash
-java -jar target/markitdown4j-0.0.3-lite.jar --help
-```
+- `lite`
+- `full`
+- `win32`
+- `win64`
+- `linux64`
+- `mac`
 
-## 制品与 Profile
+建议：
 
-| Profile | 产物 | OCR 策略 | 推荐场景 |
-| --- | --- | --- | --- |
-| `lite` | `markitdown4j-<version>-lite.jar` | 不内置 `tess4j` | 默认下载、CI、远程 OCR |
-| `full` | `markitdown4j-<version>-full.jar` | 内置完整 `tess4j` | Windows 一包即用 |
-| `win32` | `markitdown4j-<version>-win32.jar` | 仅 32 位 Windows native | 32 位 Windows |
-| `win64` | `markitdown4j-<version>-win64.jar` | 仅 64 位 Windows native | 64 位 Windows |
-| `linux64` | `markitdown4j-<version>-linux64.jar` | 不内置 `tess4j` | Linux + 外部或远程 OCR |
-| `mac` | `markitdown4j-<version>-mac.jar` | 不内置 `tess4j` | macOS + 外部或远程 OCR |
-
-构建示例：
-
-```bash
-mvn package -DskipTests
-mvn package -DskipTests -Pfull
-mvn package -DskipTests -Pwin32
-mvn package -DskipTests -Pwin64
-mvn package -DskipTests -Plinux64
-mvn package -DskipTests -Pmac
-```
+- Windows 64 位：`win64`
+- Windows 32 位：`win32`
+- Linux：`linux64`
+- macOS：`mac`
+- 只要最小包：`lite`
+- 要完整 OCR 资源：`full`
 
 ## OCR 后端
 
-当前可用的 OCR engine：
+当前对外支持的 OCR engine：
 
 - `tess4j`
 - `tesseract-cli`
 - `paddleocr`
 - `http`
 
-推荐组合：
+适用建议：
 
-- Windows：`win64` 或 `full` + `--ocr-engine tess4j`
-- Linux / macOS：`linux64` / `mac` + `--ocr-engine tesseract-cli`
-- 远程结构化 OCR：`--ocr-engine paddleocr`
-- 自定义远程 OCR：`--ocr-engine http`
+- `tess4j`：Windows 内嵌 OCR
+- `tesseract-cli`：Linux / macOS 本地 OCR
+- `paddleocr`：远程结构化 OCR
+- `http`：接自定义远程 OCR 服务
 
-### 统一 OCR 配置
+## 统一 OCR 配置
+
+所有 OCR 后端共用同一组配置字段，用户不需要为不同 OCR 学习不同配置格式。
 
 ```properties
 ocr.enable=true
@@ -88,7 +80,38 @@ ocr.poll.interval=5000
 ocr.language=auto
 ```
 
-### OCR 使用示例
+配置文件位置：
+
+- [`../.markitdown.properties`](../.markitdown.properties)
+
+统一字段：
+
+- `ocr.enable`
+- `ocr.engine`
+- `ocr.endpoint`
+- `ocr.api.key`
+- `ocr.model`
+- `ocr.timeout`
+- `ocr.poll.interval`
+- `ocr.language`
+
+配置优先级：
+
+1. 命令行参数，例如 `--ocr-engine`
+2. 环境变量，例如 `MARKITDOWN_OCR_ENGINE`
+3. [`../.markitdown.properties`](../.markitdown.properties)
+4. 程序内置默认值
+
+常用环境变量：
+
+- `MARKITDOWN_OCR_ENGINE`
+- `MARKITDOWN_OCR_ENDPOINT`
+- `MARKITDOWN_OCR_API_KEY`
+- `MARKITDOWN_OCR_MODEL`
+- `MARKITDOWN_OCR_TIMEOUT`
+- `MARKITDOWN_OCR_POLL_INTERVAL`
+
+## OCR 使用示例
 
 ```bash
 # Windows embedded OCR
@@ -115,73 +138,39 @@ java -jar target/markitdown4j-0.0.3-lite.jar test/with-text.png --ocr --ocr-engi
 | 压缩包 | `.zip` |
 | 音频元数据 | `.mp3`, `.wav`, `.flac` |
 
-## 常用命令
-
-```bash
-# PDF 转 Markdown
-java -jar target/markitdown4j-0.0.3-lite.jar test/plain-text.pdf -o out/plain-text.md
-
-# Word 转 Markdown
-java -jar target/markitdown4j-0.0.3-lite.jar test/basic.docx -o out/basic.md
-
-# 批量处理
-java -jar target/markitdown4j-0.0.3-lite.jar test --batch -o out/
-```
-
 ## 测试
 
-当前项目不是只靠说明文档验证，而是同时保留了自动化测试、样例文件集和发布前集成验证。
-
-### 自动化测试
-
-当前 `mvn test` 已覆盖：
-
-- `ProfileConfigurationTest`
-- `OcrEngineFactoryTest`
-- `PaddleOcrEngineTest`
-- `TextConverterStreamingTest`
-- `ZipConverterTest`
-
-执行方式：
+自动化测试：
 
 ```bash
 mvn test
 ```
 
-### 样例文件集
+当前自动化测试覆盖：
 
-[`../test/test.zip`](../test/test.zip) 是完整测试文件包，当前包含约 104 个测试文件。
+- Profile 构建和命名检查
+- OCR engine factory 选择
+- PaddleOCR 响应解析
+- 文本流式转换
+- ZIP 委托和嵌套转换行为
 
-解压后的 [`../test/`](../test/README.md) 目录用于回归和手工验证，覆盖：
+测试文件资产：
 
-- PDF、Word、Excel、PowerPoint
-- 图片 OCR
-- HTML
-- 文本、JSON、XML、CSV
-- ZIP 与嵌套 ZIP
-- 音频元数据
-- 多语言、空文件、大文件、加密文件等场景
+- [`../test/test.zip`](../test/test.zip) 是正式测试文件包
+- 当前包含约 104 个测试文件
+- 用于回归、兼容性和 release 前手工验证
 
-### 典型集成验证
-
-当前版本已经实测过以下关键链路：
+已验证的关键链路：
 
 - `lite` 基础转换
 - `win64 + tess4j`
 - `linux64 + tesseract-cli`
 - `lite + paddleocr`
-- PDF / DOCX / XLSX / HTML / ZIP / 音频元数据转换
 
-更详细的样例说明和建议命令见：
+更多测试说明见 [../test/README.md](../test/README.md)。
 
-- [`../test/test.zip`](../test/test.zip)
-- [`../test/README.md`](../test/README.md)
-
-## 文档
+## 相关文档
 
 - [命令参考](COMMAND_REFERENCE.md)
-- [OCR Provider 路线图](../OCR_PROVIDER_ROADMAP.md)
-
-## License
-
-[MIT](../LICENSE)
+- [测试说明](../test/README.md)
+- [OCR 路线图](../OCR_PROVIDER_ROADMAP.md)

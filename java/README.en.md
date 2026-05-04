@@ -1,81 +1,73 @@
-# MarkItDown Java CLI
+# markitdown4j
 
-[Chinese](README.md) | English | [Back to repository root](../README.md)
+[中文](README.md) | [English](README.en.md)
 
-`markitdown4j` is the main project in this repository. It is a Java command-line tool that converts common document formats into Markdown for AI preprocessing, knowledge-base workflows, batch archiving, and automation.
+`markitdown4j` is the primary deliverable in this repository. It is a Java CLI that converts common documents and file content into Markdown, and calls different OCR backends through a unified configuration model when OCR is needed.
 
 ## Features
 
-- Convert PDF, Word, Excel, PowerPoint, HTML, images, text, JSON, XML, CSV, and ZIP archives
-- OCR support for scanned PDFs and images
+- Multi-format Markdown conversion
 - Pluggable OCR backends
-- Platform-focused and lightweight build artifacts
-- Batch, recursive, and parallel conversion
+- Platform-focused build artifacts
+- Batch, recursive, and parallel processing
+- Unified configuration and CLI entry points
 
 ## Requirements
 
 - Java 11+
-- Maven 3.9+ when building from source
+- Maven 3.8+
 
-## Quick Start
+## Quick start
 
-### 1. Build
-
-```bash
-mvn package -DskipTests
-```
-
-### 2. Run
-
-```bash
-java -jar target/markitdown4j-0.0.3-lite.jar test/basic.txt -o out/basic.md
-```
-
-### 3. Help
-
-```bash
-java -jar target/markitdown4j-0.0.3-lite.jar --help
-```
-
-## Artifact Profiles
-
-| Profile | Artifact | OCR strategy | Recommended usage |
-| --- | --- | --- | --- |
-| `lite` | `markitdown4j-<version>-lite.jar` | No embedded `tess4j` | Default download, CI, remote OCR |
-| `full` | `markitdown4j-<version>-full.jar` | Full embedded `tess4j` | Windows all-in-one OCR |
-| `win32` | `markitdown4j-<version>-win32.jar` | 32-bit Windows native only | 32-bit Windows |
-| `win64` | `markitdown4j-<version>-win64.jar` | 64-bit Windows native only | 64-bit Windows |
-| `linux64` | `markitdown4j-<version>-linux64.jar` | No embedded `tess4j` | Linux with external or remote OCR |
-| `mac` | `markitdown4j-<version>-mac.jar` | No embedded `tess4j` | macOS with external or remote OCR |
-
-Build examples:
+Build:
 
 ```bash
 mvn package -DskipTests
-mvn package -DskipTests -Pfull
-mvn package -DskipTests -Pwin32
-mvn package -DskipTests -Pwin64
-mvn package -DskipTests -Plinux64
-mvn package -DskipTests -Pmac
 ```
+
+Minimal example:
+
+```bash
+java -jar target/markitdown4j-0.0.3-lite.jar document.pdf -o output.md
+```
+
+## Release artifacts
+
+- `lite`
+- `full`
+- `win32`
+- `win64`
+- `linux64`
+- `mac`
+
+Recommended choices:
+
+- Windows 64-bit: `win64`
+- Windows 32-bit: `win32`
+- Linux: `linux64`
+- macOS: `mac`
+- Smallest package: `lite`
+- Full OCR payload: `full`
 
 ## OCR Backends
 
-Available OCR engines:
+Public OCR engines:
 
 - `tess4j`
 - `tesseract-cli`
 - `paddleocr`
 - `http`
 
-Recommended pairings:
+Recommended use:
 
-- Windows: `win64` or `full` + `--ocr-engine tess4j`
-- Linux / macOS: `linux64` / `mac` + `--ocr-engine tesseract-cli`
-- Remote structured OCR: `--ocr-engine paddleocr`
-- Custom remote OCR: `--ocr-engine http`
+- `tess4j`: embedded OCR on Windows
+- `tesseract-cli`: local OCR on Linux / macOS
+- `paddleocr`: remote structured OCR
+- `http`: custom remote OCR services
 
-### Unified OCR Configuration
+## Unified OCR Configuration
+
+All OCR backends use the same fields, so users do not need a different configuration model for each provider.
 
 ```properties
 ocr.enable=true
@@ -88,7 +80,38 @@ ocr.poll.interval=5000
 ocr.language=auto
 ```
 
-### OCR Examples
+Configuration file:
+
+- [`../.markitdown.properties`](../.markitdown.properties)
+
+Shared fields:
+
+- `ocr.enable`
+- `ocr.engine`
+- `ocr.endpoint`
+- `ocr.api.key`
+- `ocr.model`
+- `ocr.timeout`
+- `ocr.poll.interval`
+- `ocr.language`
+
+Configuration precedence:
+
+1. CLI arguments such as `--ocr-engine`
+2. Environment variables such as `MARKITDOWN_OCR_ENGINE`
+3. [`../.markitdown.properties`](../.markitdown.properties)
+4. Built-in defaults
+
+Common environment variables:
+
+- `MARKITDOWN_OCR_ENGINE`
+- `MARKITDOWN_OCR_ENDPOINT`
+- `MARKITDOWN_OCR_API_KEY`
+- `MARKITDOWN_OCR_MODEL`
+- `MARKITDOWN_OCR_TIMEOUT`
+- `MARKITDOWN_OCR_POLL_INTERVAL`
+
+## OCR Examples
 
 ```bash
 # Windows embedded OCR
@@ -115,73 +138,39 @@ java -jar target/markitdown4j-0.0.3-lite.jar test/with-text.png --ocr --ocr-engi
 | Archives | `.zip` |
 | Audio metadata | `.mp3`, `.wav`, `.flac` |
 
-## Common Commands
-
-```bash
-# PDF to Markdown
-java -jar target/markitdown4j-0.0.3-lite.jar test/plain-text.pdf -o out/plain-text.md
-
-# Word to Markdown
-java -jar target/markitdown4j-0.0.3-lite.jar test/basic.docx -o out/basic.md
-
-# Batch processing
-java -jar target/markitdown4j-0.0.3-lite.jar test --batch -o out/
-```
-
 ## Testing
 
-The project is not documented-only; it is validated through automated tests, sample files, and release smoke runs.
-
-### Automated tests
-
-The current `mvn test` suite covers:
-
-- `ProfileConfigurationTest`
-- `OcrEngineFactoryTest`
-- `PaddleOcrEngineTest`
-- `TextConverterStreamingTest`
-- `ZipConverterTest`
-
-Run:
+Automated tests:
 
 ```bash
 mvn test
 ```
 
-### Sample file suite
+Current automated coverage:
 
-[`../test/test.zip`](../test/test.zip) is the full packaged test dataset and currently contains about 104 test files.
+- Profile build and naming checks
+- OCR engine factory selection
+- PaddleOCR response parsing
+- Streaming text conversion
+- ZIP delegation and nested conversion behavior
 
-The extracted [`../test/`](../test/README.md) directory is used for regression and manual verification, covering:
+Test assets:
 
-- PDF, Word, Excel, PowerPoint
-- Image OCR
-- HTML
-- Text, JSON, XML, CSV
-- ZIP and nested ZIP archives
-- Audio metadata
-- Multilingual, empty, large, and encrypted file scenarios
+- [`../test/test.zip`](../test/test.zip) is the packaged test dataset
+- It currently contains about 104 test files
+- It is used for regression, compatibility, and pre-release manual validation
 
-### Practical smoke validation
-
-The current release has been exercised through these real-world paths:
+Verified paths:
 
 - `lite` basic conversion
 - `win64 + tess4j`
 - `linux64 + tesseract-cli`
 - `lite + paddleocr`
-- PDF / DOCX / XLSX / HTML / ZIP / audio metadata conversion
 
-For more sample-oriented guidance, see:
+For more details, see [../test/README.md](../test/README.md).
 
-- [`../test/test.zip`](../test/test.zip)
-- [`../test/README.md`](../test/README.md)
-
-## Documentation
+## Related Documents
 
 - [Command Reference](COMMAND_REFERENCE.md)
-- [OCR Provider Roadmap](../OCR_PROVIDER_ROADMAP.md)
-
-## License
-
-[MIT](../LICENSE)
+- [Test Guide](../test/README.md)
+- [OCR Roadmap](../OCR_PROVIDER_ROADMAP.md)

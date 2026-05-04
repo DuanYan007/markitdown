@@ -1,92 +1,35 @@
-# MarkItDown Java CLI Command Reference
-
-[Chinese Guide](README.md) | [English Guide](README.en.md)
+# markitdown4j Command Reference
 
 ## Basic Usage
 
 ```bash
-java -jar target/markitdown4j-<version>-lite.jar <input> [options]
+java -jar target/markitdown4j-<version>-lite.jar <input> -o <output>
 ```
 
-Examples:
-
-```bash
-java -jar target/markitdown4j-<version>-lite.jar document.pdf -o output.md
-java -jar target/markitdown4j-<version>-lite.jar image.png --ocr --ocr-engine paddleocr -o result.md
-java -jar target/markitdown4j-<version>-lite.jar docs --batch -o out/
-```
-
-## Core Options
+## Common Options
 
 | Option | Description |
 | --- | --- |
-| `-h`, `--help` | Show help |
-| `-V`, `--version` | Show version |
-| `-o`, `--output <path>` | Output file or directory |
-| `-f`, `--format <markdown\|plain\|json>` | Output format |
-| `-v`, `--verbose` | Verbose logs |
-| `-q`, `--quiet` | Quiet mode |
-| `-i`, `--interactive` | Interactive mode |
-
-## Content Options
-
-| Option | Description |
-| --- | --- |
-| `--include-metadata` | Include metadata |
-| `--no-metadata` | Exclude metadata |
-| `--include-images` | Include images |
-| `--no-images` | Exclude images |
-| `--include-tables` | Include tables |
-| `--no-tables` | Exclude tables |
-| `--image-format <markdown\|html\|base64>` | Image rendering format |
-| `--table-format <github\|markdown\|pipe>` | Table rendering format |
-| `--image-output-dir <dir>` | Output directory for extracted images |
+| `-o`, `--output` | Output Markdown file |
+| `-r`, `--recursive` | Process directories recursively |
+| `--batch` | Batch process multiple files |
+| `--parallel` | Enable parallel conversion |
+| `--show-config` | Print the active configuration |
+| `--version` | Print CLI version |
+| `--help` | Show help |
 
 ## OCR Options
 
 | Option | Description |
 | --- | --- |
 | `--ocr` | Enable OCR |
-| `-l`, `--language <lang>` | OCR language, for example `auto`, `eng`, `chi_sim` |
-| `--ocr-engine <engine>` | OCR backend: `tess4j`, `tesseract-cli`, `paddleocr`, `http` |
-| `--ocr-endpoint <url>` | Remote OCR endpoint |
-| `--ocr-api-key <key>` | Remote OCR API key or token |
-| `--ocr-model <model>` | Remote OCR model name |
-| `--ocr-timeout <ms>` | OCR timeout in milliseconds |
-| `--ocr-poll-interval <ms>` | Polling interval for async OCR providers |
-
-## PDF and File Options
-
-| Option | Description |
-| --- | --- |
-| `--pdf-password <password>` | Password for encrypted PDF files |
-| `--large-file` | Allow large file processing |
-| `--max-file-size <bytes>` | Maximum allowed file size |
-| `--temp-dir <dir>` | Temporary directory |
-| `-m`, `--mime-type <type>` | MIME type for stdin / pipe input |
-
-## Performance Options
-
-| Option | Description |
-| --- | --- |
-| `-p`, `--parallel` | Enable parallel processing |
-| `--threads <n>` | Number of worker threads |
-| `--progress` | Show progress output |
-| `--stats` | Show processing statistics |
-| `--memory-limit <mb>` | Memory limit in MB |
-| `--optimize-memory` | Enable memory optimization |
-
-## Directory and Config Options
-
-| Option | Description |
-| --- | --- |
-| `-r`, `--recursive` | Process subdirectories recursively |
-| `--batch` | Batch process supported files in a directory |
-| `--examples` | Show usage examples |
-| `--generate-config` | Generate a default config file |
-| `--config-path <path>` | Path to a config file |
-| `--validate-config` | Validate a config file |
-| `--show-config` | Print the active configuration |
+| `--ocr-engine` | OCR backend: `tess4j`, `tesseract-cli`, `paddleocr`, `http` |
+| `--ocr-endpoint` | Remote OCR endpoint |
+| `--ocr-api-key` | Remote OCR API key or token |
+| `--ocr-model` | Remote OCR model name |
+| `--ocr-timeout` | OCR request timeout in milliseconds |
+| `--ocr-poll-interval` | Poll interval for asynchronous OCR backends |
+| `-l`, `--language` | OCR language |
 
 ## OCR Configuration Example
 
@@ -100,6 +43,26 @@ ocr.timeout=30000
 ocr.poll.interval=5000
 ocr.language=auto
 ```
+
+Configuration file:
+
+- [`../.markitdown.properties`](../.markitdown.properties)
+
+Configuration precedence:
+
+1. CLI arguments such as `--ocr-engine`
+2. Environment variables such as `MARKITDOWN_OCR_ENGINE`
+3. [`../.markitdown.properties`](../.markitdown.properties)
+4. Built-in defaults
+
+Common environment variables:
+
+- `MARKITDOWN_OCR_ENGINE`
+- `MARKITDOWN_OCR_ENDPOINT`
+- `MARKITDOWN_OCR_API_KEY`
+- `MARKITDOWN_OCR_MODEL`
+- `MARKITDOWN_OCR_TIMEOUT`
+- `MARKITDOWN_OCR_POLL_INTERVAL`
 
 ## Typical Commands
 
@@ -125,4 +88,10 @@ java -jar target/markitdown4j-<version>-linux64.jar image.png --ocr --ocr-engine
 
 ```bash
 java -jar target/markitdown4j-<version>-lite.jar image.png --ocr --ocr-engine paddleocr -o result.md
+```
+
+### Show Active Configuration
+
+```bash
+java -jar target/markitdown4j-<version>-lite.jar --show-config
 ```

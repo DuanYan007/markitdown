@@ -51,6 +51,10 @@ buildNumber.properties
 .idea/compiler.xml
 .idea/libraries/
 
+# Local agent / collaboration memory
+.claude/
+memory/
+
 # Eclipse
 .apt_generated
 .classpath

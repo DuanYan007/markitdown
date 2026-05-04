@@ -18,7 +18,6 @@
 - [java/COMMAND_REFERENCE.md](java/COMMAND_REFERENCE.md): command and parameter reference
 - [test/README.md](test/README.md): test dataset and validation notes
 - [OCR_PROVIDER_ROADMAP.md](OCR_PROVIDER_ROADMAP.md): OCR / VLM roadmap
-- [memory/PROJECT_MEMORY.md](memory/PROJECT_MEMORY.md): project memory
 
 ## Quick start
 
@@ -144,7 +143,6 @@ The extracted [test/README.md](test/README.md) explains how to use the dataset.
 ## Other subprojects
 
 - `markitdown-mcp`: MCP-related content
-- `markitdown-web`: historical web-direction experiment, not the primary delivery path
 
 ## License
 

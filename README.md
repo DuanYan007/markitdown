@@ -18,7 +18,6 @@
 - [java/COMMAND_REFERENCE.md](java/COMMAND_REFERENCE.md)：命令与参数参考
 - [test/README.md](test/README.md)：测试数据集和验证说明
 - [OCR_PROVIDER_ROADMAP.md](OCR_PROVIDER_ROADMAP.md)：OCR / VLM 扩展路线图
-- [memory/PROJECT_MEMORY.md](memory/PROJECT_MEMORY.md)：项目记忆
 
 ## 快速开始
 
@@ -144,7 +143,6 @@ mvn test
 ## 其他子项目
 
 - `markitdown-mcp`：MCP 相关内容
-- `markitdown-web`：历史 Web 方向实验，当前不是主交付路径
 
 ## License
 

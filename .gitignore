@@ -61,6 +61,7 @@ __pycache__/
 # Local agent / collaboration memory
 .claude/
 memory/
+markitdown.local.yml
 
 # Eclipse
 .apt_generated

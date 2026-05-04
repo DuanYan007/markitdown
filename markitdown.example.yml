@@ -1,0 +1,40 @@
+app:
+  profile: default
+
+ocr:
+  enabled: false
+  engine: paddleocr
+  endpoint: ""
+  api_key: ""
+  model: ""
+  timeout: 30000
+  poll_interval: 5000
+  language: auto
+
+content:
+  include_metadata: true
+  include_images: true
+  include_tables: true
+  page_break_mode: heading
+
+output:
+  dir: ./output
+  image_dir: assets
+  preserve_structure: false
+  organize_by_type: false
+
+format:
+  image: markdown
+  table: github
+
+performance:
+  parallel: false
+  threads: 0
+  optimize_memory: false
+  max_file_size: 52428800
+  batch_size: 20
+
+providers:
+  paddleocr:
+    job_endpoint: ""
+    result_format: markdown

@@ -18,6 +18,7 @@
 - [markitdown-java/COMMAND_REFERENCE.md](markitdown-java/COMMAND_REFERENCE.md): command and parameter reference
 - [test/README.md](test/README.md): test dataset and validation notes
 - [OCR_PROVIDER_ROADMAP.md](OCR_PROVIDER_ROADMAP.md): OCR / VLM roadmap
+- [CONFIGURATION_DESIGN.md](CONFIGURATION_DESIGN.md): YAML-first configuration design
 
 ## Quick start
 
@@ -46,38 +47,43 @@ The project uses a unified OCR configuration model. Users do not need to learn a
 
 Example:
 
-```properties
-ocr.enable=true
-ocr.engine=paddleocr
-ocr.endpoint=https://paddleocr.aistudio-app.com/api/v2/ocr/jobs
-ocr.api.key=YOUR_TOKEN
-ocr.model=PaddleOCR-VL-1.5
-ocr.timeout=30000
-ocr.poll.interval=5000
-ocr.language=auto
+```yaml
+ocr:
+  enabled: true
+  engine: paddleocr
+  endpoint: https://paddleocr.aistudio-app.com/api/v2/ocr/jobs
+  api_key: YOUR_TOKEN
+  model: PaddleOCR-VL-1.5
+  timeout: 30000
+  poll_interval: 5000
+  language: auto
 ```
 
 Configuration file:
 
-- [`.markitdown.properties`](.markitdown.properties)
+- `markitdown.yml`
+- [`markitdown.example.yml`](markitdown.example.yml)
+- `markitdown.local.yml` for private local overrides
+- [`.markitdown.properties`](.markitdown.properties) remains supported as a legacy format
 
 Shared OCR fields:
 
-- `ocr.enable`
+- `ocr.enabled`
 - `ocr.engine`
 - `ocr.endpoint`
-- `ocr.api.key`
+- `ocr.api_key`
 - `ocr.model`
 - `ocr.timeout`
-- `ocr.poll.interval`
+- `ocr.poll_interval`
 - `ocr.language`
 
 Configuration precedence:
 
 1. CLI arguments such as `--ocr-engine`
-2. Environment variables such as `MARKITDOWN_OCR_ENGINE`
-3. [`.markitdown.properties`](.markitdown.properties)
+2. `markitdown.local.yml`
+3. `markitdown.yml`
 4. Built-in defaults
+5. Environment variables for secret / deployment fallback
 
 Common environment variables:
 
@@ -139,6 +145,7 @@ The extracted [test/README.md](test/README.md) explains how to use the dataset.
 - [Command Reference](markitdown-java/COMMAND_REFERENCE.md)
 - [Test Guide](test/README.md)
 - [OCR Roadmap](OCR_PROVIDER_ROADMAP.md)
+- [Configuration Design](CONFIGURATION_DESIGN.md)
 
 ## Other subprojects
 

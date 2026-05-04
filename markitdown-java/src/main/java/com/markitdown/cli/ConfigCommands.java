@@ -22,7 +22,7 @@ public class ConfigCommands {
         try {
             ConfigurationManager manager = new ConfigurationManager();
             Path outputPath = configPath != null ?
-                Paths.get(configPath) : Paths.get(".markitdown.properties");
+                Paths.get(configPath) : Paths.get(manager.getDefaultConfigFileName());
 
             if (Files.exists(outputPath)) {
                 System.err.println("配置文件已存在: " + outputPath);
@@ -47,8 +47,9 @@ public class ConfigCommands {
      */
     public static int validateConfig(String configPath) {
         try {
+            ConfigurationManager manager = new ConfigurationManager();
             Path path = configPath != null ?
-                Paths.get(configPath) : Paths.get(".markitdown.properties");
+                Paths.get(configPath) : Paths.get(resolveDefaultConfigPath(manager));
 
             if (!Files.exists(path)) {
                 System.err.println("❌ 配置文件不存在: " + path);
@@ -56,7 +57,6 @@ public class ConfigCommands {
             }
 
             // 验证配置文件
-            ConfigurationManager manager = new ConfigurationManager();
             List<String> errors = manager.validateConfiguration(path);
 
             if (errors.isEmpty()) {
@@ -150,5 +150,19 @@ public class ConfigCommands {
         } else {
             return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
         }
+    }
+
+    private static String resolveDefaultConfigPath(ConfigurationManager manager) {
+        Path yaml = Paths.get(manager.getDefaultConfigFileName());
+        if (Files.exists(yaml)) {
+            return yaml.toString();
+        }
+
+        Path legacy = Paths.get(manager.getLegacyConfigFileName());
+        if (Files.exists(legacy)) {
+            return legacy.toString();
+        }
+
+        return manager.getDefaultConfigFileName();
     }
 }

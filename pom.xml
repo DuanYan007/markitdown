@@ -108,19 +108,16 @@
             <version>${pdfbox.version}</version>
         </dependency>
 
-        <!-- PDFBox tools for text extraction -->
-        <dependency>
-            <groupId>org.apache.pdfbox</groupId>
-            <artifactId>pdfbox-tools</artifactId>
-            <version>2.0.30</version>
-        </dependency>
-
-        <!-- Tika PDF parser -->
+        <!-- Tika parser modules used by image/audio converters -->
         <dependency>
             <groupId>org.apache.tika</groupId>
-            <artifactId>tika-parsers-standard-package</artifactId>
-            <version>2.9.1</version>
-            <type>pom</type>
+            <artifactId>tika-parser-image-module</artifactId>
+            <version>${tika.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-parser-audiovideo-module</artifactId>
+            <version>${tika.version}</version>
         </dependency>
 
         <!-- Jsoup for HTML parsing -->
@@ -139,6 +136,11 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-yaml</artifactId>
             <version>${jackson.version}</version>
         </dependency>
               <!-- Apache Tika for metadata extraction -->

@@ -33,27 +33,32 @@ java -jar target/markitdown4j-<version>-lite.jar <input> -o <output>
 
 ## OCR Configuration Example
 
-```properties
-ocr.enable=true
-ocr.engine=paddleocr
-ocr.endpoint=https://paddleocr.aistudio-app.com/api/v2/ocr/jobs
-ocr.api.key=YOUR_TOKEN
-ocr.model=PaddleOCR-VL-1.5
-ocr.timeout=30000
-ocr.poll.interval=5000
-ocr.language=auto
+```yaml
+ocr:
+  enabled: true
+  engine: paddleocr
+  endpoint: https://paddleocr.aistudio-app.com/api/v2/ocr/jobs
+  api_key: YOUR_TOKEN
+  model: PaddleOCR-VL-1.5
+  timeout: 30000
+  poll_interval: 5000
+  language: auto
 ```
 
 Configuration file:
 
-- [`../.markitdown.properties`](../.markitdown.properties)
+- `../markitdown.yml`
+- [`../markitdown.example.yml`](../markitdown.example.yml)
+- `../markitdown.local.yml`
+- [`../.markitdown.properties`](../.markitdown.properties) (legacy)
 
 Configuration precedence:
 
 1. CLI arguments such as `--ocr-engine`
-2. Environment variables such as `MARKITDOWN_OCR_ENGINE`
-3. [`../.markitdown.properties`](../.markitdown.properties)
+2. `markitdown.local.yml`
+3. `markitdown.yml`
 4. Built-in defaults
+5. Environment variables for secret fallback
 
 Common environment variables:
 

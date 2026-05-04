@@ -44,8 +44,8 @@ The code-level automated tests live in:
 - `src/test/java/com/markitdown/build/ProfileConfigurationTest.java`
 - `src/test/java/com/markitdown/ocr/OcrEngineFactoryTest.java`
 - `src/test/java/com/markitdown/ocr/PaddleOcrEngineTest.java`
-- `src/test/java/com/markitdown/converter/TextConverterStreamingTest.java`
-- `src/test/java/com/markitdown/converter/ZipConverterTest.java`
+- `src/test/java/com/markitdown/converters/TextConverterStreamingTest.java`
+- `src/test/java/com/markitdown/converters/ZipConverterTest.java`
 
 Run them with:
 

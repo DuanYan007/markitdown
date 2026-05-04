@@ -45,6 +45,13 @@ buildNumber.properties
 *.swo
 *~
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
 # IDE specific
 .idea/modules.xml
 .idea/jarRepositories.xml
@@ -71,6 +78,7 @@ memory/
 /nbdist/
 /.nb-gradle/
 build/
+dist/
 
 # OS
 .DS_Store

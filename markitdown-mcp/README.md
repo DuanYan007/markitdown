@@ -1,4 +1,4 @@
-# MarkItDown MCP Advanced
+# MarkItDown MCP
 
 A powerful MCP (Model Context Protocol) server that converts various document formats to Markdown with PaddleOCR support.
 
@@ -7,13 +7,13 @@ A powerful MCP (Model Context Protocol) server that converts various document fo
 Install from PyPI using uv:
 
 ```bash
-uv pip install markitdown-mcp-advanced
+uv pip install markitdown-mcp
 ```
 
 Or with pip:
 
 ```bash
-pip install markitdown-mcp-advanced
+pip install markitdown-mcp
 ```
 
 ## Features
@@ -64,7 +64,7 @@ Add to Claude Desktop config file:
   "mcpServers": {
     "markitdown": {
       "command": "uvx",
-      "args": ["--from","markitdown-mcp-advanced", "markitdown-mcp"],
+      "args": ["--from","markitdown-mcp", "markitdown-mcp"],
       "env": {
         "PADDLE_API_URL": "your_api_url",
         "PADDLE_TOKEN": "your_token",

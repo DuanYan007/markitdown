@@ -14,8 +14,8 @@
 
 ## 仓库结构
 
-- [java/README.md](java/README.md)：Java CLI 主项目说明
-- [java/COMMAND_REFERENCE.md](java/COMMAND_REFERENCE.md)：命令与参数参考
+- [markitdown-java/README.md](markitdown-java/README.md)：Java CLI 主项目说明
+- [markitdown-java/COMMAND_REFERENCE.md](markitdown-java/COMMAND_REFERENCE.md)：命令与参数参考
 - [test/README.md](test/README.md)：测试数据集和验证说明
 - [OCR_PROVIDER_ROADMAP.md](OCR_PROVIDER_ROADMAP.md)：OCR / VLM 扩展路线图
 
@@ -134,9 +134,9 @@ mvn test
 
 ## 文档入口
 
-- [Java CLI 中文文档](java/README.md)
-- [Java CLI English Guide](java/README.en.md)
-- [命令参考](java/COMMAND_REFERENCE.md)
+- [Java CLI 中文文档](markitdown-java/README.md)
+- [Java CLI English Guide](markitdown-java/README.en.md)
+- [命令参考](markitdown-java/COMMAND_REFERENCE.md)
 - [测试说明](test/README.md)
 - [OCR 路线图](OCR_PROVIDER_ROADMAP.md)
 

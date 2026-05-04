@@ -1,0 +1,1205 @@
+package com.markitdown.cli;
+
+import com.markitdown.api.ConversionResult;
+import com.markitdown.api.DocumentConverter;
+import com.markitdown.config.ConversionOptions;
+import com.markitdown.config.ConfigurationManager;
+import com.markitdown.converters.*;
+import com.markitdown.core.ConverterRegistry;
+import com.markitdown.core.MarkItDownEngine;
+import com.markitdown.exceptions.ConversionException;
+import com.markitdown.utils.FileTypeDetector;
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
+
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * @class MarkItDownCommand
+ * @brief MarkItDown Java命令行接口类
+ * @details 基于Picocli框架实现的命令行工具，提供文档转换功能
+ *          支持多种输入格式、丰富的配置选项、批量处理和管道输入
+ *          提供详细的帮助信息和错误处理机制
+ *
+ * @author duan yan
+ * @version 2.1.0
+ * @since 2.0.0
+ */
+@Command(
+        name = "markitdown",
+        mixinStandardHelpOptions = true,
+        version = "markitdown4j 0.0.3",
+        description = "Convert documents to Markdown",
+        footerHeading = "Examples:%n",
+        footer = {
+                "  markitdown document.pdf                       # Convert a PDF to Markdown",
+                "  markitdown document.docx -o output.md         # Convert a Word document",
+                "  markitdown presentation.pptx --no-tables      # Convert a PowerPoint without tables",
+                "  markitdown spreadsheet.xlsx --ocr             # Convert an Excel file with OCR",
+                "  markitdown *.pdf                              # Convert all PDFs in the directory",
+                "  markitdown *.pdf --parallel                   # Convert multiple PDFs in parallel",
+                "  cat document.pdf | markitdown                 # Convert from stdin",
+                "  curl -s http://example.com/doc.pdf | markitdown  # Convert a remote document stream"
+        }
+)
+public class MarkItDownCommand implements Callable<Integer> {
+
+    // ==================== 输出选项 ====================
+
+    @Option(
+            names = {"-o", "--output"},
+            description = "Output file or directory (default: stdout for pipe, .md file for file input)"
+    )
+    private String output;
+
+    @Option(
+            names = {"--format", "-f"},
+            description = "Output format: markdown, plain, json (default: markdown)"
+    )
+    private String outputFormat = "markdown";
+
+    // ==================== 内容包含选项 ====================
+
+    @Option(
+            names = {"--include-images"},
+            description = "Include images in the output (default: true)"
+    )
+    private Boolean includeImages = null;
+
+    @Option(
+            names = {"--no-images"},
+            description = "Exclude images from the output"
+    )
+    private boolean noImages;
+
+    @Option(
+            names = {"--include-tables"},
+            description = "Include tables in the output (default: true)"
+    )
+    private Boolean includeTables = null;
+
+    @Option(
+            names = {"--no-tables"},
+            description = "Exclude tables from the output"
+    )
+    private boolean noTables;
+
+    @Option(
+            names = {"--include-metadata"},
+            description = "Include metadata in the output (default: true)"
+    )
+    private Boolean includeMetadata = null;
+
+    @Option(
+            names = {"--no-metadata"},
+            description = "Exclude metadata from the output"
+    )
+    private boolean noMetadata;
+
+    // ==================== OCR 选项 ====================
+
+    @Option(
+            names = {"--ocr"},
+            description = "Use OCR for text extraction from images"
+    )
+    private boolean useOcr;
+
+    @Option(
+            names = {"--language", "-l"},
+            description = "Language for OCR (default: auto)",
+            defaultValue = "auto"
+    )
+    private String language;
+
+    @Option(
+            names = {"--ocr-engine"},
+            description = "OCR engine: tess4j, tesseract-cli, http, paddleocr (default: tess4j)"
+    )
+    private String ocrEngine;
+
+    @Option(
+            names = {"--ocr-endpoint"},
+            description = "Remote OCR endpoint"
+    )
+    private String ocrEndpoint;
+
+    @Option(
+            names = {"--ocr-api-key"},
+            description = "Remote OCR API key or token"
+    )
+    private String ocrApiKey;
+
+    @Option(
+            names = {"--ocr-model"},
+            description = "OCR model name for remote providers"
+    )
+    private String ocrModel;
+
+    @Option(
+            names = {"--ocr-timeout"},
+            description = "OCR timeout in milliseconds"
+    )
+    private int ocrTimeout;
+
+    @Option(
+            names = {"--ocr-poll-interval"},
+            description = "OCR polling interval in milliseconds for async providers"
+    )
+    private int ocrPollInterval;
+
+    // ==================== 格式选项 ====================
+
+    @Option(
+            names = {"--table-format"},
+            description = "Table format: github, markdown, pipe (default: github)",
+            defaultValue = "github"
+    )
+    private String tableFormat;
+
+    @Option(
+            names = {"--image-format"},
+            description = "Image format: markdown, html, base64 (default: markdown)",
+            defaultValue = "markdown"
+    )
+    private String imageFormat;
+
+    @Option(
+            names = {"--image-output-dir"},
+            description = "Directory for extracted images relative to output file (default: assets/)",
+            defaultValue = "assets"
+    )
+    private String imageOutputDir;
+
+    // ==================== 文件选项 ====================
+
+    @Option(
+            names = {"--max-file-size"},
+            description = "Maximum file size in bytes (default: 50MB, use 0 for unlimited)",
+            defaultValue = "52428800"
+    )
+    private long maxFileSize;
+
+    // ==================== PDF 特定选项 ====================
+
+    @Option(
+            names = {"--pdf-password"},
+            description = "Password for encrypted PDF files"
+    )
+    private String pdfPassword;
+
+    @Option(
+            names = {"--large-file"},
+            description = "Allow processing of large files (>50MB)"
+    )
+    private boolean largeFile;
+
+    @Option(
+            names = {"--temp-dir"},
+            description = "Temporary directory for file operations"
+    )
+    private String tempDir;
+
+    // ==================== 输出控制选项 ====================
+
+    @Option(
+            names = {"--verbose", "-v"},
+            description = "Enable verbose output"
+    )
+    private boolean verbose;
+
+    @Option(
+            names = {"--quiet", "-q"},
+            description = "Suppress all output except errors"
+    )
+    private boolean quiet;
+
+    // ==================== 性能选项 ====================
+
+    @Option(
+            names = {"--parallel", "-p"},
+            description = "Enable parallel processing for multiple files"
+    )
+    private boolean parallel;
+
+    @Option(
+            names = {"--threads"},
+            description = "Number of threads for parallel processing (default: CPU cores)",
+            defaultValue = "0"
+    )
+    private int threads;
+
+    @Option(
+            names = {"--progress"},
+            description = "Show progress bar during conversion"
+    )
+    private boolean showProgress;
+
+    @Option(
+            names = {"--stats"},
+            description = "Show performance statistics after conversion"
+    )
+    private boolean showStats;
+
+    @Option(
+            names = {"--memory-limit"},
+            description = "Memory limit in MB for batch processing (default: auto-detect)"
+    )
+    private int memoryLimit = 0;
+
+    @Option(
+            names = {"--optimize-memory"},
+            description = "Enable memory optimization for large file processing"
+    )
+    private boolean optimizeMemory;
+
+    @Option(
+            names = {"--examples"},
+            description = "Show usage examples and exit"
+    )
+    private boolean showExamples;
+
+    @Option(
+            names = {"--generate-config"},
+            description = "Generate default configuration file"
+    )
+    private boolean generateConfig;
+
+    @Option(
+            names = {"--config-path"},
+            description = "Path to configuration file"
+    )
+    private String configPath;
+
+    @Option(
+            names = {"--validate-config"},
+            description = "Validate configuration file"
+    )
+    private boolean validateConfig;
+
+    @Option(
+            names = {"--show-config"},
+            description = "Show current configuration"
+    )
+    private boolean showConfig;
+
+    @Option(
+            names = {"--interactive", "-i"},
+            description = "Enable interactive mode with detailed feedback"
+    )
+    private boolean interactive;
+
+    @Option(
+            names = {"--recursive", "-r"},
+            description = "Recursively process files in directories"
+    )
+    private boolean recursive;
+
+    @Option(
+            names = {"--batch"},
+            description = "Batch process all supported files in directory"
+    )
+    private boolean batch;
+
+    // ==================== MIME 类型选项（用于管道输入）====================
+
+    @Option(
+            names = {"--mime-type", "-m"},
+            description = "MIME type for pipe input (e.g., application/pdf)"
+    )
+    private String mimeType;
+
+    // ==================== 输入文件参数 ====================
+
+    @Parameters(
+            arity = "0..*",
+            description = "Input files to convert (optional if using pipe input)"
+    )
+    private String[] inputFiles;
+
+    // ==================== 运行时状态 ====================
+
+    private MarkItDownEngine engine;
+    private PerformanceStats stats;
+
+    @Override
+    public Integer call() throws Exception {
+        Instant startTime = Instant.now();
+        stats = new PerformanceStats();
+
+        // 处理配置相关命令
+        if (generateConfig) {
+            return ConfigCommands.generateConfig(configPath);
+        }
+
+        if (validateConfig) {
+            return ConfigCommands.validateConfig(configPath);
+        }
+
+        if (showConfig) {
+            return ConfigCommands.showConfig(configPath);
+        }
+
+        // 内存优化设置
+        if (optimizeMemory) {
+            System.gc(); // 在开始处理前清理内存
+        }
+
+        // 显示使用示例
+        if (showExamples) {
+            System.out.println(UserMessageHelper.getUsageExamples());
+            return 0;
+        }
+
+        // 交互模式欢迎信息
+        if (interactive && !quiet) {
+            System.out.println("🚀 MarkItDown Java - 文档转换工具");
+            System.out.println("版本: 2.0.0 | 交互模式已启用\n");
+        }
+
+        try {
+            // Initialize engine
+            engine = createEngine();
+
+            // Configure options
+            ConversionOptions options = createConversionOptions();
+
+            // 内存监控
+            Runtime runtime = Runtime.getRuntime();
+            long maxMemory = runtime.maxMemory();
+            long usedMemory = runtime.totalMemory() - runtime.freeMemory();
+            double memoryUsage = (double) usedMemory / maxMemory;
+
+            if (verbose && memoryUsage > 0.7) {
+                System.err.printf("Warning: High memory usage detected: %.1f%%%n", memoryUsage * 100);
+            }
+
+            // Check for pipe input
+            if (isPipeInput()) {
+                return processPipeInput(options);
+            }
+
+            // Check if input files are provided
+            if (inputFiles == null || inputFiles.length == 0) {
+                System.err.println("Error: No input files specified and no pipe input detected.");
+                System.err.println("Use --help for usage information.");
+                return 1;
+            }
+
+            // Process files
+            int result;
+            if (parallel && inputFiles.length > 1) {
+                result = processFilesParallel(options);
+            } else {
+                result = processFilesSequential(options);
+            }
+
+            // Show statistics
+            if (showStats) {
+                stats.printSummary(Duration.between(startTime, Instant.now()));
+            }
+
+            return result;
+
+        } catch (Exception e) {
+            // 处理所有异常，提供用户友好的错误消息
+            if (!quiet) {
+                String errorMessage = UserMessageHelper.getUserFriendlyError(e);
+                System.err.println(errorMessage);
+            }
+
+            if (verbose) {
+                System.err.println("\n🔍 详细错误信息:");
+                e.printStackTrace();
+            }
+
+            // 返回适当的退出代码
+            if (e instanceof ConversionException) {
+                return 1; // 转换错误
+            } else {
+                return 2; // 系统错误
+            }
+        } finally {
+            if (engine != null) {
+                engine.shutdown();
+            }
+        }
+    }
+
+    /**
+     * 检测是否是管道输入
+     */
+    private boolean isPipeInput() {
+        try {
+            return System.in.available() > 0;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 处理管道输入
+     */
+    private int processPipeInput(ConversionOptions options) {
+        try {
+            // 如果没有指定 MIME 类型，尝试检测
+            String detectedMimeType = mimeType;
+            if (detectedMimeType == null) {
+                // 尝试从输入流检测 MIME 类型（读取前几个字节）
+                PushbackInputStream pbStream = new PushbackInputStream(System.in, 1024);
+                byte[] header = new byte[1024];
+                int bytesRead = pbStream.read(header);
+                if (bytesRead > 0) {
+                    pbStream.unread(header, 0, bytesRead);
+                    detectedMimeType = detectMimeTypeFromHeader(header, bytesRead);
+                }
+
+                if (detectedMimeType == null) {
+                    System.err.println("Error: Cannot detect MIME type from pipe input.");
+                    System.err.println("Please specify --mime-type option.");
+                    return 1;
+                }
+
+                if (!quiet) {
+                    System.err.println("Detected MIME type: " + detectedMimeType);
+                }
+            }
+
+            // 检查是否支持该 MIME 类型
+            if (!engine.isSupported(detectedMimeType)) {
+                System.err.println("Error: Unsupported MIME type: " + detectedMimeType);
+                return 1;
+            }
+
+            // 执行转换
+            ConversionResult result = engine.convert(System.in, detectedMimeType, options);
+
+            if (result.isSuccessful()) {
+                // 输出到 stdout
+                System.out.println(result.getMarkdown());
+
+                if (verbose) {
+                    System.err.println("Conversion successful. Output size: " + result.getMarkdown().length() + " chars");
+                }
+
+                if (result.hasWarnings()) {
+                    System.err.println("Warnings:");
+                    for (String warning : result.getWarnings()) {
+                        System.err.println("  - " + warning);
+                    }
+                }
+
+                return 0;
+            } else {
+                System.err.println("Conversion failed:");
+                for (String warning : result.getWarnings()) {
+                    System.err.println("  - " + warning);
+                }
+                return 1;
+            }
+
+        } catch (Exception e) {
+            System.err.println("Pipe conversion error: " + e.getMessage());
+            if (verbose) {
+                e.printStackTrace();
+            }
+            return 1;
+        }
+    }
+
+    /**
+     * 从文件头检测 MIME 类型
+     */
+    private String detectMimeTypeFromHeader(byte[] header, int length) {
+        String headerStr = new String(header, 0, Math.min(length, 100)).toLowerCase();
+
+        // PDF signature
+        if (headerStr.startsWith("%pdf")) {
+            return "application/pdf";
+        }
+
+        // ZIP-based formats (DOCX, XLSX, PPTX, EPUB)
+        if (length >= 4 && header[0] == 0x50 && header[1] == 0x4B) {
+            // 需要进一步分析，默认返回 docx
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        }
+
+        // HTML signatures
+        if (headerStr.contains("<!doctype") || headerStr.contains("<html")) {
+            return "text/html";
+        }
+
+        // XML signatures
+        if (headerStr.trim().startsWith("<?xml")) {
+            return "application/xml";
+        }
+
+        // JSON signatures
+        String trimmed = headerStr.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            return "application/json";
+        }
+
+        // Image signatures
+        if (length >= 8 && header[0] == (byte)0x89 && header[1] == 0x50 &&
+            header[2] == 0x4E && header[3] == 0x47) {
+            return "image/png";
+        }
+        if (length >= 2 && header[0] == (byte)0xFF && header[1] == (byte)0xD8) {
+            return "image/jpeg";
+        }
+        if (length >= 6 && header[0] == 'G' && header[1] == 'I' && header[2] == 'F') {
+            return "image/gif";
+        }
+
+        // Default to plain text
+        if (isTextContent(header, length)) {
+            return "text/plain";
+        }
+
+        return null;
+    }
+
+    /**
+     * 检测是否是文本内容
+     */
+    private boolean isTextContent(byte[] bytes, int length) {
+        for (int i = 0; i < length; i++) {
+            byte b = bytes[i];
+            if (b < 0x20 && b != '\t' && b != '\n' && b != '\r') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 顺序处理文件
+     */
+    private int processFilesSequential(ConversionOptions options) {
+        int successCount = 0;
+        int errorCount = 0;
+
+        // First collect all files to process (including directories if recursive/batch)
+        List<String> allFiles = new ArrayList<>();
+        for (String inputFile : inputFiles) {
+            if (inputFile.contains("*") || inputFile.contains("?")) {
+                allFiles.addAll(expandWildcard(inputFile));
+            } else {
+                Path path = Paths.get(inputFile);
+                if (Files.isDirectory(path)) {
+                    if (recursive || batch) {
+                        allFiles.addAll(collectFilesFromDirectory(path, recursive));
+                    } else {
+                        if (!quiet) {
+                            System.err.println("Warning: " + inputFile + " is a directory. Use --recursive or --batch to process directories.");
+                        }
+                    }
+                } else {
+                    allFiles.add(inputFile);
+                }
+            }
+        }
+
+        if (allFiles.isEmpty()) {
+            System.err.println("No files to process.");
+            return 1;
+        }
+
+        // Process collected files
+        for (int i = 0; i < allFiles.size(); i++) {
+            String inputFile = allFiles.get(i);
+
+            if (showProgress) {
+                showProgress(i + 1, allFiles.size(), inputFile);
+            }
+
+            try {
+                processFile(inputFile, options);
+                successCount++;
+                stats.recordSuccess(inputFile);
+            } catch (Exception e) {
+                errorCount++;
+                stats.recordError(inputFile);
+                if (!quiet) {
+                    System.err.println("Error processing " + inputFile + ": " + e.getMessage());
+                }
+                if (verbose) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        if (showProgress) {
+            System.err.println(); // 换行
+        }
+
+        if (!quiet && allFiles.size() > 1) {
+            System.err.printf("Conversion completed: %d successful, %d failed%n", successCount, errorCount);
+        }
+
+        return errorCount > 0 ? 1 : 0;
+    }
+
+    /**
+     * 并行处理文件
+     */
+    private int processFilesParallel(ConversionOptions options) {
+        List<String> allFiles = new ArrayList<>();
+
+        // 收集所有文件（包括目录处理）
+        for (String inputFile : inputFiles) {
+            if (inputFile.contains("*") || inputFile.contains("?")) {
+                allFiles.addAll(expandWildcard(inputFile));
+            } else {
+                Path path = Paths.get(inputFile);
+                if (Files.isDirectory(path)) {
+                    if (recursive || batch) {
+                        allFiles.addAll(collectFilesFromDirectory(path, recursive));
+                    } else {
+                        if (!quiet) {
+                            System.err.println("Warning: " + inputFile + " is a directory. Use --recursive or --batch to process directories.");
+                        }
+                    }
+                } else {
+                    allFiles.add(inputFile);
+                }
+            }
+        }
+
+        if (allFiles.isEmpty()) {
+            System.err.println("No files to process.");
+            return 1;
+        }
+
+        // 确定线程池大小
+        int poolSize = threads > 0 ? threads : Runtime.getRuntime().availableProcessors();
+        ExecutorService executor = Executors.newFixedThreadPool(poolSize);
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger errorCount = new AtomicInteger(0);
+        AtomicInteger processed = new AtomicInteger(0);
+
+        try {
+            // 使用自定义线程池进行并行处理
+            List<CompletableFuture<Void>> futures = allFiles.stream()
+                    .map(inputFile -> CompletableFuture.runAsync(() -> {
+                        try {
+                            if (showProgress) {
+                                int current = processed.incrementAndGet();
+                                showProgress(current, allFiles.size(), inputFile);
+                            }
+
+                            processFile(inputFile, options);
+                            successCount.incrementAndGet();
+                            stats.recordSuccess(inputFile);
+                        } catch (Exception e) {
+                            errorCount.incrementAndGet();
+                            stats.recordError(inputFile);
+                            if (!quiet) {
+                                System.err.println("Error processing " + inputFile + ": " + e.getMessage());
+                            }
+                            if (verbose) {
+                                e.printStackTrace();
+                            }
+                        }
+                    }, executor))
+                    .collect(java.util.stream.Collectors.toList());
+
+            // 等待所有任务完成
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()])).join();
+
+        } finally {
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        if (showProgress) {
+            System.err.println();
+        }
+
+        if (!quiet) {
+            System.err.printf("Parallel conversion completed: %d successful, %d failed%n",
+                    successCount.get(), errorCount.get());
+        }
+
+        return errorCount.get() > 0 ? 1 : 0;
+    }
+
+    /**
+     * 显示进度条
+     */
+    private void showProgress(int current, int total, String fileName) {
+        int percent = (int) ((current * 100) / total);
+        int barLength = 30;
+        int filled = (percent * barLength) / 100;
+
+        StringBuilder bar = new StringBuilder();
+        bar.append("[");
+        for (int i = 0; i < barLength; i++) {
+            if (i < filled) {
+                bar.append("=");
+            } else if (i == filled) {
+                bar.append(">");
+            } else {
+                bar.append(" ");
+            }
+        }
+        bar.append("]");
+
+        // 截断文件名
+        String displayName = fileName;
+        if (displayName.length() > 30) {
+            displayName = "..." + displayName.substring(displayName.length() - 27);
+        }
+
+        System.err.printf("\r%s %3d%% (%d/%d) %s",
+                bar, percent, current, total, displayName);
+    }
+
+    /**
+     * 展开通配符为文件列表
+     */
+    private List<String> expandWildcard(String pattern) {
+        List<String> files = new ArrayList<>();
+        try {
+            Path parentPath = Paths.get(pattern).getParent();
+            if (parentPath == null) {
+                parentPath = Paths.get(".");
+            }
+
+            String fileName = Paths.get(pattern).getFileName().toString();
+            String globPattern = fileName.replace("*", ".*").replace("?", ".");
+
+            Files.list(parentPath)
+                    .filter(path -> path.getFileName().toString().matches(globPattern))
+                    .filter(path -> path.toFile().isFile())
+                    .filter(engine::isSupported)
+                    .forEach(path -> files.add(path.toString()));
+        } catch (IOException e) {
+            if (!quiet) {
+                System.err.println("Error expanding wildcard: " + e.getMessage());
+            }
+        }
+        return files;
+    }
+
+    /**
+     * Creates and configures the MarkItDown engine.
+     */
+    private MarkItDownEngine createEngine() {
+        return new MarkItDownEngine(MarkItDownEngine.createDefaultRegistry());
+    }
+
+    /**
+     * Creates conversion options from command-line arguments and configuration file.
+     */
+    private ConversionOptions createConversionOptions() {
+        ConversionOptions.Builder builder = ConversionOptions.builder();
+
+        // Load configuration from file if available
+        ConfigurationManager configManager = new ConfigurationManager();
+
+        // Process boolean options with precedence: CLI args > config file > defaults
+        boolean incImages = this.includeImages != null ? this.includeImages :
+            (configManager.getBooleanProperty("content.include.images", !noImages));
+        boolean incTables = this.includeTables != null ? this.includeTables :
+            (configManager.getBooleanProperty("content.include.tables", !noTables));
+        boolean incMetadata = this.includeMetadata != null ? this.includeMetadata :
+            (configManager.getBooleanProperty("content.include.metadata", !noMetadata));
+
+        // OCR options with precedence
+        boolean useOcrConfig = this.useOcr || configManager.getBooleanProperty("ocr.enable", false);
+        String languageConfig = this.language != null ? this.language :
+            configManager.getProperty("ocr.language", "auto");
+        String ocrEngineConfig = this.ocrEngine != null ? this.ocrEngine :
+            configManager.getOcrEngine();
+        String ocrEndpointConfig = this.ocrEndpoint != null ? this.ocrEndpoint :
+            configManager.getOcrEndpoint();
+        String ocrApiKeyConfig = this.ocrApiKey != null ? this.ocrApiKey :
+            configManager.getOcrApiKey();
+        String ocrModelConfig = this.ocrModel != null ? this.ocrModel :
+            configManager.getOcrModel();
+        int ocrTimeoutConfig = this.ocrTimeout > 0 ? this.ocrTimeout :
+            configManager.getOcrTimeout();
+        int ocrPollIntervalConfig = this.ocrPollInterval > 0 ? this.ocrPollInterval :
+            configManager.getOcrPollInterval();
+
+        // Format options with precedence
+        String tableFormatConfig = this.tableFormat != null ? this.tableFormat :
+            configManager.getProperty("format.table", "github");
+        String imageFormatConfig = this.imageFormat != null ? this.imageFormat :
+            configManager.getProperty("format.image", "markdown");
+
+        // 处理大文件选项
+        long effectiveMaxFileSize = maxFileSize;
+        if (largeFile) {
+            effectiveMaxFileSize = 0; // 0 表示无限制
+        } else if (effectiveMaxFileSize == 0) {
+            // Use config file value if not set via CLI
+            effectiveMaxFileSize = configManager.getLongProperty("performance.max.file.size", 52428800);
+        }
+
+        // Image output directory with precedence
+        String imageOutputDirConfig = this.imageOutputDir != null ? this.imageOutputDir :
+            configManager.getProperty("output.image.dir", "assets");
+
+        // Temp directory with precedence
+        String tempDirConfig = this.tempDir != null ? this.tempDir :
+            configManager.getProperty("output.temp.dir", System.getProperty("java.io.tmpdir"));
+
+        builder.includeImages(incImages)
+               .includeTables(incTables)
+               .includeMetadata(incMetadata)
+               .useOcr(useOcrConfig)
+               .language(languageConfig)
+               .ocrEngine(ocrEngineConfig)
+               .ocrEndpoint(ocrEndpointConfig)
+               .ocrApiKey(ocrApiKeyConfig)
+               .ocrModel(ocrModelConfig)
+               .ocrTimeout(ocrTimeoutConfig)
+               .ocrPollInterval(ocrPollIntervalConfig)
+               .tableFormat(tableFormatConfig)
+               .imageFormat(imageFormatConfig)
+               .imageOutputDir(imageOutputDirConfig)
+               .maxFileSize(effectiveMaxFileSize);
+
+        if (tempDirConfig != null) {
+            builder.tempDirectory(Paths.get(tempDirConfig));
+        }
+
+        // 添加PDF密码到自定义选项
+        if (pdfPassword != null && !pdfPassword.isEmpty()) {
+            builder.customOption("pdfPassword", pdfPassword);
+        }
+
+        // 添加Tesseract路径配置到自定义选项
+        builder.customOption("tesseractPath", configManager.getTesseractPath());
+        builder.customOption("tessdataPath", configManager.getTessdataPath());
+
+        return builder.build();
+    }
+
+    /**
+     * Processes a single file.
+     */
+    private void processFile(String inputFile, ConversionOptions options) throws ConversionException {
+        Instant startTime = Instant.now();
+        Path inputPath = Paths.get(inputFile);
+        File inputFileObj = inputPath.toFile();
+
+        if (!inputFileObj.exists()) {
+            if (interactive) {
+                System.err.println("❌ 文件不存在: " + inputFile);
+                System.err.println(UserMessageHelper.getFileTypeDetectionInfo(inputFile));
+            }
+            throw new ConversionException("Input file does not exist: " + inputFile);
+        }
+
+        if (!inputFileObj.isFile()) {
+            if (interactive) {
+                System.err.println("❌ 不是文件: " + inputFile);
+            }
+            throw new ConversionException("Input path is not a file: " + inputFile);
+        }
+
+        // Check if file type is supported
+        if (!engine.isSupported(inputPath)) {
+            if (interactive) {
+                System.err.println("❌ 不支持的文件类型");
+                System.err.println(UserMessageHelper.getFileTypeDetectionInfo(inputFile));
+            }
+            throw new ConversionException("Unsupported file type: " + inputFile);
+        }
+
+        // 交互模式显示处理信息
+        if (interactive && !quiet) {
+            System.out.println("📄 正在处理: " + inputFile);
+            System.out.println("   大小: " + formatFileSize(inputFileObj.length()));
+        }
+
+        // Determine output path for image extraction and file writing
+        Path outputPath;
+        String effectiveOutput = output;
+        if (effectiveOutput == null) {
+            // Check configuration file for default output directory
+            ConfigurationManager configManager = new ConfigurationManager();
+            effectiveOutput = configManager.getOutputDir();
+        }
+
+        if (effectiveOutput != null) {
+            outputPath = determineOutputPath(inputPath, effectiveOutput);
+        } else {
+            // Default to input filename with .md extension in same directory
+            String fileName = inputPath.getFileName().toString();
+            outputPath = inputPath.getParent().resolve(fileName + ".md");
+        }
+
+        // Set output path in options for image extraction
+        ConversionOptions optionsWithPath = new ConversionOptions(options)
+                .setOutputPath(outputPath);
+
+        // Convert the file
+        ConversionResult result = engine.convert(inputPath, optionsWithPath);
+
+        // 交互模式显示成功信息
+        if (interactive && !quiet) {
+            long duration = java.time.Duration.between(startTime, Instant.now()).toMillis();
+            System.out.println("✅ 转换完成 (" + duration + "ms)");
+            if (outputPath != null) {
+                System.out.println("   输出: " + outputPath);
+            }
+        }
+
+        // Determine output destination
+        if (output == null && inputFiles.length == 1) {
+            // Single file, no output specified -> stdout
+            System.out.println(result.getMarkdown());
+        } else {
+            // Multiple files or output specified -> write to file
+            writeResult(result, outputPath);
+
+            if (!quiet && !showProgress) {
+                System.err.printf("Converted: %s -> %s%n", inputFile, outputPath);
+            }
+        }
+
+        // Record stats
+        Duration duration = Duration.between(startTime, Instant.now());
+        stats.recordFileStats(inputFile, inputFileObj.length(), duration.toMillis());
+
+        if (verbose && result.hasWarnings()) {
+            System.err.println("Warnings for " + inputFile + ":");
+            for (String warning : result.getWarnings()) {
+                System.err.println("  - " + warning);
+            }
+        }
+    }
+
+    /**
+     * Processes wildcard patterns.
+     */
+    private int[] processWildcard(String pattern, ConversionOptions options) {
+        int successCount = 0;
+        int errorCount = 0;
+
+        List<String> files = expandWildcard(pattern);
+        for (String file : files) {
+            try {
+                processFile(file, options);
+                successCount++;
+                stats.recordSuccess(file);
+            } catch (ConversionException e) {
+                errorCount++;
+                stats.recordError(file);
+                if (!quiet) {
+                    System.err.println("Error processing " + file + ": " + e.getMessage());
+                }
+            }
+        }
+
+        return new int[]{successCount, errorCount};
+    }
+
+    /**
+     * 格式化文件大小显示
+     */
+    private String formatFileSize(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        } else if (bytes < 1024 * 1024) {
+            return String.format("%.1f KB", bytes / 1024.0);
+        } else if (bytes < 1024 * 1024 * 1024) {
+            return String.format("%.1f MB", bytes / (1024.0 * 1024));
+        } else {
+            return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
+        }
+    }
+
+    /**
+     * Determines the output path based on input path and options.
+     */
+    private Path determineOutputPath(Path inputPath, String outputPathStr) {
+        Path outputPath = Paths.get(outputPathStr);
+
+        // If output is a directory, use input filename with .md extension
+        if (Files.isDirectory(outputPath) || outputPathStr.endsWith("/") || outputPathStr.endsWith("\\")) {
+            String fileName = inputPath.getFileName().toString();
+            return outputPath.resolve(fileName + ".md");
+        }
+
+        return outputPath;
+    }
+
+    /**
+     * Writes the conversion result to the output file.
+     */
+    private void writeResult(ConversionResult result, Path outputPath) throws ConversionException {
+        try {
+            // Create parent directories if they don't exist
+            Path parentPath = outputPath.getParent();
+            if (parentPath != null) {
+                Files.createDirectories(parentPath);
+            }
+
+            // Write the markdown content
+            try (BufferedWriter writer = Files.newBufferedWriter(outputPath)) {
+                writer.write(result.getMarkdown());
+            }
+
+        } catch (IOException e) {
+            throw new ConversionException("Failed to write output file: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Gets the file name without extension.
+     */
+    private String getFileNameWithoutExtension(String fileName) {
+        if (fileName == null) {
+            return "";
+        }
+
+        int lastDotIndex = fileName.lastIndexOf('.');
+        if (lastDotIndex > 0) {
+            return fileName.substring(0, lastDotIndex);
+        }
+
+        return fileName;
+    }
+
+    /**
+     * 从目录收集所有支持的文件
+     * @param directory 要扫描的目录
+     * @param recursive 是否递归扫描子目录
+     * @return 支持的文件路径列表
+     */
+    private List<String> collectFilesFromDirectory(Path directory, boolean recursive) {
+        List<String> files = new ArrayList<>();
+        try {
+            if (recursive) {
+                // 递归遍历目录
+                Files.walk(directory)
+                    .filter(Files::isRegularFile)
+                    .filter(engine::isSupported)
+                    .forEach(path -> files.add(path.toString()));
+            } else {
+                // 只处理当前目录
+                Files.list(directory)
+                    .filter(Files::isRegularFile)
+                    .filter(engine::isSupported)
+                    .forEach(path -> files.add(path.toString()));
+            }
+
+            if (!quiet && !files.isEmpty()) {
+                System.err.printf("Found %d supported file(s) in %s%n", files.size(), directory);
+            }
+        } catch (IOException e) {
+            System.err.println("Error scanning directory " + directory + ": " + e.getMessage());
+        }
+        return files;
+    }
+
+    public static void main(String[] args) {
+        int exitCode = new CommandLine(new MarkItDownCommand()).execute(args);
+        System.exit(exitCode);
+    }
+
+    /**
+     * 性能统计内部类
+     */
+    private static class PerformanceStats {
+        private final List<FileStats> fileStats = new java.util.concurrent.CopyOnWriteArrayList<>();
+        private final AtomicInteger successCount = new AtomicInteger(0);
+        private final AtomicInteger errorCount = new AtomicInteger(0);
+
+        void recordSuccess(String file) {
+            successCount.incrementAndGet();
+        }
+
+        void recordError(String file) {
+            errorCount.incrementAndGet();
+        }
+
+        void recordFileStats(String file, long size, long durationMs) {
+            fileStats.add(new FileStats(file, size, durationMs));
+        }
+
+        void printSummary(Duration totalDuration) {
+            System.err.println();
+            System.err.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            System.err.println("  性能统计");
+            System.err.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            System.err.printf("  %-25s %-12s %-10s %-12s%n", "文件", "大小", "时间", "速度");
+            System.err.println("  ──────────────────────────────────────────────────────────────");
+
+            long totalSize = 0;
+            long totalTime = 0;
+
+            for (FileStats fs : fileStats) {
+                String displayName = fs.file.length() > 25 ? "..." + fs.file.substring(fs.file.length() - 22) : fs.file;
+                String sizeStr = formatSize(fs.size);
+                String timeStr = String.format("%.2fs", fs.durationMs / 1000.0);
+                String speedStr = fs.durationMs > 0 ? formatSize(fs.size * 1000 / fs.durationMs) + "/s" : "N/A";
+
+                System.err.printf("  %-25s %-12s %-10s %-12s%n", displayName, sizeStr, timeStr, speedStr);
+
+                totalSize += fs.size;
+                totalTime += fs.durationMs;
+            }
+
+            System.err.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            System.err.printf("  总计: %d 文件, %s, %.2fs%n",
+                    fileStats.size(), formatSize(totalSize), totalDuration.toMillis() / 1000.0);
+            System.err.printf("  成功: %d, 失败: %d%n", successCount.get(), errorCount.get());
+            if (totalTime > 0) {
+                System.err.printf("  平均速度: %s/s%n", formatSize(totalSize * 1000 / totalTime));
+            }
+            System.err.println();
+        }
+
+        private String formatSize(long bytes) {
+            if (bytes < 1024) return bytes + "B";
+            if (bytes < 1024 * 1024) return String.format("%.1fKB", bytes / 1024.0);
+            if (bytes < 1024 * 1024 * 1024) return String.format("%.1fMB", bytes / (1024.0 * 1024));
+            return String.format("%.1fGB", bytes / (1024.0 * 1024 * 1024));
+        }
+
+        private static class FileStats {
+            final String file;
+            final long size;
+            final long durationMs;
+
+            FileStats(String file, long size, long durationMs) {
+                this.file = file;
+                this.size = size;
+                this.durationMs = durationMs;
+            }
+        }
+    }
+}

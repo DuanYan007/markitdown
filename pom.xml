@@ -183,7 +183,7 @@
 
     <build>
         <finalName>markitdown4j-${project.version}-${build.profile}</finalName>
-        <sourceDirectory>java</sourceDirectory>
+        <sourceDirectory>markitdown-java</sourceDirectory>
         <testSourceDirectory>src/test/java</testSourceDirectory>
         <resources>
             <resource>

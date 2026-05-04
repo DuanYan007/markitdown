@@ -3,12 +3,12 @@ requires = ["hatchling >= 1.26"]
 build-backend = "hatchling.build"
 
 [project]
-name = "markitdown_mcp_advanced"
+name = "markitdown-mcp"
 version = "0.0.1"
 authors = [
   { name="DuanYan007", email="duanyan2024@gmail.com" },
 ]
-description = "Advanced MarkItDown MCP server with PaddleOCR support for PDF, images, and Office documents"
+description = "MarkItDown MCP server with PaddleOCR support for PDF, images, and Office documents"
 readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [
@@ -33,7 +33,7 @@ xls = [
     "xlrd==1.2.0",
 ]
 all = [
-    "markitdown_mcp_advanced[xls]",
+    "markitdown-mcp[xls]",
 ]
 
 
@@ -42,7 +42,7 @@ Homepage = "https://github.com/DuanYan007/markitdown"
 Issues = "https://github.com/DuanYan007/markitdown/issues"
 
 [project.scripts]
-markitdown-mcp = "markitdown_mcp_advanced.__main__:main"
+markitdown-mcp = "markitdown_mcp.__main__:main"
 
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""

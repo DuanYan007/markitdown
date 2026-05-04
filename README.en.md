@@ -14,8 +14,8 @@
 
 ## Repository layout
 
-- [java/README.en.md](java/README.en.md): Java CLI guide
-- [java/COMMAND_REFERENCE.md](java/COMMAND_REFERENCE.md): command and parameter reference
+- [markitdown-java/README.en.md](markitdown-java/README.en.md): Java CLI guide
+- [markitdown-java/COMMAND_REFERENCE.md](markitdown-java/COMMAND_REFERENCE.md): command and parameter reference
 - [test/README.md](test/README.md): test dataset and validation notes
 - [OCR_PROVIDER_ROADMAP.md](OCR_PROVIDER_ROADMAP.md): OCR / VLM roadmap
 
@@ -134,9 +134,9 @@ The extracted [test/README.md](test/README.md) explains how to use the dataset.
 
 ## Documentation
 
-- [Java CLI Guide (CN)](java/README.md)
-- [Java CLI Guide (EN)](java/README.en.md)
-- [Command Reference](java/COMMAND_REFERENCE.md)
+- [Java CLI Guide (CN)](markitdown-java/README.md)
+- [Java CLI Guide (EN)](markitdown-java/README.en.md)
+- [Command Reference](markitdown-java/COMMAND_REFERENCE.md)
 - [Test Guide](test/README.md)
 - [OCR Roadmap](OCR_PROVIDER_ROADMAP.md)
 

@@ -4,44 +4,36 @@ import com.markitdown.api.ConversionResult;
 import com.markitdown.api.DocumentConverter;
 import com.markitdown.config.ConversionOptions;
 import com.markitdown.exceptions.ConversionException;
-import com.markitdown.utils.FileTypeDetector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * @class ZipConverter
- * @brief ZIP 压缩文件转换器，用于递归处理 ZIP 内的文件
- * @details 解压 ZIP 文件，遍历其中的所有支持格式的文件，逐个转换为 Markdown
- *          支持嵌套 ZIP 文件的递归处理
- *          保持文件结构信息，便于追踪来源
- *
- * @author duan yan
- * @version 2.1.0
- * @since 2.1.0
+ * Converts ZIP archives by delegating each supported entry back to the active conversion pipeline.
  */
 public class ZipConverter implements DocumentConverter {
 
     private static final Logger logger = LoggerFactory.getLogger(ZipConverter.class);
-
-    // 嵌套深度限制
     private static final int MAX_NESTING_DEPTH = 5;
 
-    // 委托转换器注册表（需要外部设置）
     private DocumentConverterDelegate delegate;
 
-    /**
-     * 设置委托转换器
-     */
     public void setDelegate(DocumentConverterDelegate delegate) {
         this.delegate = delegate;
     }
@@ -53,18 +45,15 @@ public class ZipConverter implements DocumentConverter {
 
         logger.info("Converting ZIP file: {}", filePath);
 
-        try (FileInputStream fis = new FileInputStream(filePath.toFile())) {
-            return convertZipStream(fis, filePath.getFileName().toString(), options, 0);
+        try (FileInputStream inputStream = new FileInputStream(filePath.toFile())) {
+            return convertZipStream(inputStream, filePath.getFileName().toString(), options, 0);
         } catch (IOException e) {
-            String errorMessage = "Failed to process ZIP file: " + e.getMessage();
-            logger.error(errorMessage, e);
-            throw new ConversionException(errorMessage, e, filePath.getFileName().toString(), getName());
+            String message = "Failed to process ZIP file: " + e.getMessage();
+            logger.error(message, e);
+            throw new ConversionException(message, e, filePath.getFileName().toString(), getName());
         }
     }
 
-    /**
-     * 转换 ZIP 输入流
-     */
     private ConversionResult convertZipStream(InputStream inputStream, String zipName,
                                               ConversionOptions options, int depth) throws ConversionException {
         if (depth > MAX_NESTING_DEPTH) {
@@ -74,37 +63,28 @@ public class ZipConverter implements DocumentConverter {
         Map<String, Object> metadata = new HashMap<>();
         List<String> warnings = new ArrayList<>();
         StringBuilder markdown = new StringBuilder();
-
-        // 添加 ZIP 文件标题
         markdown.append("# ZIP Archive: ").append(zipName).append("\n\n");
 
         int processedCount = 0;
         int errorCount = 0;
         long totalSize = 0;
 
-        try (ZipInputStream zis = new ZipInputStream(inputStream, StandardCharsets.UTF_8)) {
+        try (ZipInputStream zipInputStream = new ZipInputStream(inputStream, StandardCharsets.UTF_8)) {
             ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                String entryName = entry.getName();
-
-                // 跳过目录
+            while ((entry = zipInputStream.getNextEntry()) != null) {
                 if (entry.isDirectory()) {
                     continue;
                 }
 
-                // 读取条目内容到内存
-                byte[] content = readEntryContent(zis);
+                String entryName = entry.getName();
+                byte[] content = readEntryContent(zipInputStream);
                 totalSize += content.length;
 
                 try {
-                    // 检测 MIME 类型
                     String mimeType = detectMimeType(entryName, content);
-
                     if (mimeType != null && delegate != null && delegate.isSupported(mimeType)) {
-                        // 处理支持的文件
                         markdown.append("## File: ").append(entryName).append("\n\n");
 
-                        // 如果是嵌套 ZIP，递归处理
                         if ("application/zip".equals(mimeType)) {
                             ConversionResult nestedResult = convertZipStream(
                                     new ByteArrayInputStream(content),
@@ -114,11 +94,12 @@ public class ZipConverter implements DocumentConverter {
                             );
                             markdown.append(nestedResult.getMarkdown()).append("\n\n");
                         } else {
-                            // 委托给对应的转换器
+                            ConversionOptions entryOptions = new ConversionOptions(options)
+                                    .setSourceFileName(entryName);
                             ConversionResult result = delegate.convert(
                                     new ByteArrayInputStream(content),
                                     mimeType,
-                                    options
+                                    entryOptions
                             );
                             markdown.append(result.getMarkdown()).append("\n\n");
 
@@ -131,11 +112,8 @@ public class ZipConverter implements DocumentConverter {
 
                         markdown.append("---\n\n");
                         processedCount++;
-                    } else {
-                        // 不支持的文件类型，记录信息
-                        if (mimeType != null) {
-                            warnings.add("Unsupported file type: " + entryName + " (" + mimeType + ")");
-                        }
+                    } else if (mimeType != null) {
+                        warnings.add("Unsupported file type: " + entryName + " (" + mimeType + ")");
                     }
                 } catch (Exception e) {
                     errorCount++;
@@ -143,48 +121,36 @@ public class ZipConverter implements DocumentConverter {
                     logger.warn("Error processing ZIP entry: {}", entryName, e);
                 }
 
-                zis.closeEntry();
+                zipInputStream.closeEntry();
             }
         } catch (IOException e) {
             throw new ConversionException("Error reading ZIP: " + e.getMessage(), e, zipName, getName());
         }
 
-        // 构建元数据
-        if (options.isIncludeMetadata()) {
-            metadata.put("ZIP文件名", zipName);
-            metadata.put("处理文件数", processedCount);
-            metadata.put("错误数", errorCount);
-            metadata.put("总大小", totalSize);
-            metadata.put("转换时刻", LocalDateTime.now());
+        if (options.content().includeMetadata()) {
+            metadata.put("ZIP File Name", zipName);
+            metadata.put("Processed File Count", processedCount);
+            metadata.put("Error Count", errorCount);
+            metadata.put("Total Size", totalSize);
+            metadata.put("Converted At", LocalDateTime.now());
         }
 
-        // 添加摘要
-        markdown.insert(0, buildSummary(metadata, processedCount, errorCount));
-
+        markdown.insert(0, buildSummary(processedCount, errorCount));
         return new ConversionResult(markdown.toString(), metadata, warnings, totalSize, zipName);
     }
 
-    /**
-     * 读取 ZIP 条目内容
-     */
-    private byte[] readEntryContent(ZipInputStream zis) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    private byte[] readEntryContent(ZipInputStream zipInputStream) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         byte[] buffer = new byte[8192];
         int len;
-        while ((len = zis.read(buffer)) > 0) {
-            baos.write(buffer, 0, len);
+        while ((len = zipInputStream.read(buffer)) > 0) {
+            outputStream.write(buffer, 0, len);
         }
-        return baos.toByteArray();
+        return outputStream.toByteArray();
     }
 
-    /**
-     * 检测 MIME 类型
-     */
     private String detectMimeType(String fileName, byte[] content) {
-        // 先尝试通过扩展名
         String extension = getFileExtension(fileName).toLowerCase();
-
-        // 常见扩展名映射
         switch (extension) {
             case "pdf":
                 return "application/pdf";
@@ -225,15 +191,14 @@ public class ZipConverter implements DocumentConverter {
                 return "application/zip";
             case "epub":
                 return "application/epub+zip";
+            default:
+                break;
         }
 
-        // 尝试通过内容检测
         if (content.length >= 4) {
-            // ZIP 签名
             if (content[0] == 0x50 && content[1] == 0x4B) {
                 return "application/zip";
             }
-            // PDF 签名
             if (content[0] == 0x25 && content[1] == 0x50 && content[2] == 0x44 && content[3] == 0x46) {
                 return "application/pdf";
             }
@@ -242,9 +207,6 @@ public class ZipConverter implements DocumentConverter {
         return null;
     }
 
-    /**
-     * 获取文件扩展名
-     */
     private String getFileExtension(String fileName) {
         int lastDot = fileName.lastIndexOf('.');
         if (lastDot > 0 && lastDot < fileName.length() - 1) {
@@ -253,10 +215,7 @@ public class ZipConverter implements DocumentConverter {
         return "";
     }
 
-    /**
-     * 构建摘要信息
-     */
-    private String buildSummary(Map<String, Object> metadata, int processedCount, int errorCount) {
+    private String buildSummary(int processedCount, int errorCount) {
         StringBuilder summary = new StringBuilder();
         summary.append("> **ZIP Archive Summary**\n");
         summary.append("> - Processed files: ").append(processedCount).append("\n");
@@ -266,13 +225,12 @@ public class ZipConverter implements DocumentConverter {
 
     @Override
     public boolean supports(String mimeType) {
-        return "application/zip".equals(mimeType) ||
-               "application/x-zip-compressed".equals(mimeType);
+        return "application/zip".equals(mimeType) || "application/x-zip-compressed".equals(mimeType);
     }
 
     @Override
     public int getPriority() {
-        return 50; // 较低优先级，让其他转换器优先
+        return 50;
     }
 
     @Override
@@ -280,16 +238,13 @@ public class ZipConverter implements DocumentConverter {
         return "ZipConverter";
     }
 
-    /**
-     * 委托转换器接口
-     */
     @FunctionalInterface
     public interface DocumentConverterDelegate {
         ConversionResult convert(InputStream inputStream, String mimeType, ConversionOptions options)
                 throws ConversionException;
 
         default boolean isSupported(String mimeType) {
-            return true; // 默认支持所有类型
+            return true;
         }
     }
 }

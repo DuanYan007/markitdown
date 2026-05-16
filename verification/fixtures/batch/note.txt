@@ -1,0 +1,2 @@
+Batch fixture note.
+This file verifies directory conversion.

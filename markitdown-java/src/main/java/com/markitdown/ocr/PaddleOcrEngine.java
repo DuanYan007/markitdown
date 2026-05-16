@@ -41,11 +41,12 @@ public class PaddleOcrEngine implements OcrEngine {
     private final HttpClient httpClient;
 
     public PaddleOcrEngine(ConversionOptions options) {
-        this.endpoint = isBlank(options.getOcrEndpoint()) ? DEFAULT_JOB_URL : options.getOcrEndpoint();
-        this.apiKey = trimToNull(options.getOcrApiKey());
-        this.model = isBlank(options.getOcrModel()) ? DEFAULT_MODEL : options.getOcrModel();
-        this.timeoutMs = Math.max(options.getOcrTimeout(), 1000);
-        this.pollIntervalMs = Math.max(options.getOcrPollInterval(), 1000);
+        ConversionOptions.OcrOptions ocr = options.ocr();
+        this.endpoint = isBlank(ocr.endpoint()) ? DEFAULT_JOB_URL : ocr.endpoint();
+        this.apiKey = trimToNull(ocr.apiKey());
+        this.model = isBlank(ocr.model()) ? DEFAULT_MODEL : ocr.model();
+        this.timeoutMs = Math.max(ocr.timeout(), 1000);
+        this.pollIntervalMs = Math.max(ocr.pollInterval(), 1000);
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(timeoutMs))
                 .followRedirects(HttpClient.Redirect.NORMAL)

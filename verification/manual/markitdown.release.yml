@@ -1,0 +1,20 @@
+content:
+  include_metadata: true
+  include_images: true
+  include_tables: true
+
+format:
+  table: github
+  image: markdown
+
+output:
+  image_dir: assets
+
+ocr:
+  enabled: false
+  engine: tesseract-cli
+  language: eng
+
+performance:
+  parallel: false
+  optimize_memory: false

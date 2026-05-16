@@ -31,17 +31,15 @@ import java.util.Set;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.stream.Collectors;
 
 /**
- * @class MarkItDownEngine
- * @brief 文档转换核心引擎，提供统一的文档转换服务
- * @details 作为整个转换系统的主要入口点，集成转换器注册表、文件类型检测
- *          提供文件验证、转换器选择、异常处理等完整功能
- *          支持多种配置选项和转换器管理操作
- *          支持 Path 和 InputStream 两种输入方式，支持异步和并行处理
+ * Core document conversion engine for MarkItDown.
+ *
+ * <p>This class acts as the main runtime entry point for library usage. It
+ * coordinates file validation, MIME detection, converter selection, and both
+ * synchronous and asynchronous conversion flows for file and stream inputs.</p>
  *
  * @author duan yan
  * @version 2.1.0
@@ -52,14 +50,12 @@ public class MarkItDownEngine {
     private static final Logger logger = LoggerFactory.getLogger(MarkItDownEngine.class);
 
     /**
-     * @brief 转换器注册表
-     * @details 管理所有已注册的文档转换器，支持动态查找和选择
+     * Registry of all currently available converters.
      */
     private final ConverterRegistry converterRegistry;
 
     /**
-     * @brief 异步处理线程池
-     * @details 用于异步转换和并行批量处理
+     * Executor used for asynchronous and parallel conversion work.
      */
     private final ExecutorService executorService;
 
@@ -92,7 +88,7 @@ public class MarkItDownEngine {
         this.executorService = Objects.requireNonNull(executorService, "Executor service cannot be null");
     }
 
-    // ==================== 同步转换方法 ====================
+    // ==================== Synchronous conversion ====================
 
     /**
      * Converts a document file to Markdown format using default options.
@@ -238,7 +234,7 @@ public class MarkItDownEngine {
         return result;
     }
 
-    // ==================== 异步转换方法 ====================
+    // ==================== Asynchronous conversion ====================
 
     /**
      * Converts a document file to Markdown format asynchronously.
@@ -288,7 +284,7 @@ public class MarkItDownEngine {
         }, executorService);
     }
 
-    // ==================== 批量并行转换方法 ====================
+    // ==================== Parallel batch conversion ====================
 
     /**
      * Converts multiple files in parallel.
@@ -320,7 +316,7 @@ public class MarkItDownEngine {
                 .collect(Collectors.toList());
     }
 
-    // ==================== 验证方法 ====================
+    // ==================== Validation ====================
 
     /**
      * Validates the input file and options.
@@ -345,7 +341,7 @@ public class MarkItDownEngine {
         // Check file size (only if maxFileSize > 0)
         try {
             long fileSize = Files.size(filePath);
-            long maxFileSize = options.getMaxFileSize();
+            long maxFileSize = options.limits().maxFileSize();
             if (maxFileSize > 0 && fileSize > maxFileSize) {
                 String errorMessage = String.format(
                         "File size (%d bytes) exceeds maximum allowed size (%d bytes). Use --large-file option to process large files.",
@@ -365,7 +361,7 @@ public class MarkItDownEngine {
         }
     }
 
-    // ==================== 转换器管理方法 ====================
+    // ==================== Converter management ====================
 
     /**
      * Registers a document converter with the engine.
@@ -395,7 +391,7 @@ public class MarkItDownEngine {
         return converterRegistry;
     }
 
-    // ==================== 查询方法 ====================
+    // ==================== Queries ====================
 
     /**
      * Checks if a file type is supported.

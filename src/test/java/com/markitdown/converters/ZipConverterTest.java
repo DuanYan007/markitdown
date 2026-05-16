@@ -47,6 +47,9 @@ class ZipConverterTest {
         assertTrue(result.isSuccessful());
         assertTrue(result.getMarkdown().contains("root file"));
         assertTrue(result.getMarkdown().contains("\"env\":\"test\""));
+        assertTrue(result.getMarkdown().contains("**File Name:** root.txt"));
+        assertTrue(result.getMarkdown().contains("**File Name:** level1/note.txt"));
+        assertTrue(result.getMarkdown().contains("**File Name:** level1/level2/data.json"));
         assertFalse(result.getMarkdown().contains("unsupported format"));
     }
 

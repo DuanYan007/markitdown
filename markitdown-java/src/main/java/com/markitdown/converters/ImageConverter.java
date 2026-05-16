@@ -1,10 +1,10 @@
 package com.markitdown.converters;
 
+import com.markdown.engine.MarkdownBuilder;
 import com.markitdown.api.ConversionResult;
 import com.markitdown.api.DocumentConverter;
 import com.markitdown.config.ConversionOptions;
 import com.markitdown.exceptions.ConversionException;
-import com.markdown.engine.MarkdownBuilder;
 import com.markitdown.ocr.OcrEngine;
 import com.markitdown.ocr.OcrEngineFactory;
 import com.markitdown.ocr.OcrException;
@@ -26,6 +26,7 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,14 +53,17 @@ public class ImageConverter implements DocumentConverter {
         try {
             BufferedImage image = ImageIO.read(filePath.toFile());
             if (image == null) {
-                throw new ConversionException("Cannot load image file: " + filePath,
-                        filePath.getFileName().toString(), getName());
+                throw new ConversionException(
+                        "Cannot load image file: " + filePath,
+                        filePath.getFileName().toString(),
+                        getName()
+                );
             }
 
             Map<String, Object> metadata = extractMetadata(filePath, image, options);
-
             String extractedText;
-            if (options.isUseOcr()) {
+
+            if (options.ocr().enabled()) {
                 try {
                     extractedText = performOcr(image, options);
                 } catch (ConversionException e) {
@@ -67,14 +71,17 @@ public class ImageConverter implements DocumentConverter {
                     extractedText = "*OCR processing failed: " + e.getMessage() + "*";
                 }
             } else {
-                extractedText = "*OCR is disabled in conversion options*";
+                extractedText = "*OCR is disabled in conversion options.*";
             }
 
             String markdownContent = convertToMarkdown(extractedText, metadata, options, filePath);
-            List<String> warnings = new ArrayList<>();
-
-            return new ConversionResult(markdownContent, metadata, warnings,
-                    filePath.toFile().length(), filePath.getFileName().toString());
+            return new ConversionResult(
+                    markdownContent,
+                    metadata,
+                    new ArrayList<>(),
+                    filePath.toFile().length(),
+                    filePath.getFileName().toString()
+            );
         } catch (IOException e) {
             String errorMessage = "Failed to read image file: " + e.getMessage();
             logger.error(errorMessage, e);
@@ -105,28 +112,29 @@ public class ImageConverter implements DocumentConverter {
     private Map<String, Object> extractMetadata(Path filePath, BufferedImage image, ConversionOptions options) {
         Map<String, Object> metadata = new LinkedHashMap<>();
 
-        if (options.isIncludeMetadata()) {
-            metadata.put("宽度", image.getWidth());
-            metadata.put("高度", image.getHeight());
-
-            String fileName = filePath.getFileName().toString();
-            String format = getFileExtension(fileName).toLowerCase();
-            metadata.put("格式", format.toUpperCase());
-            metadata.put("颜色类型", getColorType(image));
-            metadata.put("文件大小", filePath.toFile().length());
-
-            try {
-                Map<String, Object> exifData = extractExifMetadata(filePath);
-                if (!exifData.isEmpty()) {
-                    metadata.putAll(exifData);
-                }
-            } catch (Exception e) {
-                logger.debug("Could not extract EXIF metadata: {}", e.getMessage());
-            }
-
-            metadata.put("转换时刻", LocalDateTime.now());
+        if (!options.content().includeMetadata()) {
+            return metadata;
         }
 
+        String fileName = filePath.getFileName().toString();
+        String format = getFileExtension(fileName).toLowerCase();
+
+        metadata.put("Width", image.getWidth());
+        metadata.put("Height", image.getHeight());
+        metadata.put("Format", format.toUpperCase());
+        metadata.put("Color Type", getColorType(image));
+        metadata.put("File Size", filePath.toFile().length());
+
+        try {
+            Map<String, Object> exifData = extractExifMetadata(filePath);
+            if (!exifData.isEmpty()) {
+                metadata.putAll(exifData);
+            }
+        } catch (Exception e) {
+            logger.debug("Could not extract EXIF metadata: {}", e.getMessage());
+        }
+
+        metadata.put("Converted At", LocalDateTime.now());
         return metadata;
     }
 
@@ -134,7 +142,6 @@ public class ImageConverter implements DocumentConverter {
         Map<String, Object> exifData = new LinkedHashMap<>();
 
         try (InputStream stream = new FileInputStream(filePath.toFile())) {
-            Tika tika = new Tika();
             Metadata metadata = new Metadata();
             Parser parser = new AutoDetectParser();
             BodyContentHandler handler = new BodyContentHandler();
@@ -142,38 +149,42 @@ public class ImageConverter implements DocumentConverter {
             context.set(Parser.class, parser);
             parser.parse(stream, handler, metadata, context);
 
-            addIfNotEmpty(exifData, "相机品牌", metadata.get("Equipment Make"));
-            addIfNotEmpty(exifData, "相机型号", metadata.get("Equipment Model"));
-            addIfNotEmpty(exifData, "拍摄时间", metadata.get("Date/Time Original"));
-            addIfNotEmpty(exifData, "曝光时间", metadata.get("Exposure Time"));
-            addIfNotEmpty(exifData, "光圈值", metadata.get("F-Number"));
-            addIfNotEmpty(exifData, "ISO感光度", metadata.get("ISO Speed Ratings"));
-            addIfNotEmpty(exifData, "焦距", metadata.get("Focal Length"));
-            addIfNotEmpty(exifData, "闪光灯", metadata.get("Flash"));
-            addIfNotEmpty(exifData, "白平衡", metadata.get("White Balance"));
-            addIfNotEmpty(exifData, "方向", metadata.get("Orientation"));
-            addIfNotEmpty(exifData, "X分辨率", metadata.get("X Resolution"));
-            addIfNotEmpty(exifData, "Y分辨率", metadata.get("Y Resolution"));
-            addIfNotEmpty(exifData, "分辨率单位", metadata.get("Resolution Units"));
-            addIfNotEmpty(exifData, "软件", metadata.get("Software"));
-            addIfNotEmpty(exifData, "艺术家", metadata.get("Artist"));
-            addIfNotEmpty(exifData, "版权", metadata.get("Copyright Notice"));
+            addIfNotEmpty(exifData, "Camera Make", metadata.get("Equipment Make"));
+            addIfNotEmpty(exifData, "Camera Model", metadata.get("Equipment Model"));
+            addIfNotEmpty(exifData, "Captured At", metadata.get("Date/Time Original"));
+            addIfNotEmpty(exifData, "Exposure Time", metadata.get("Exposure Time"));
+            addIfNotEmpty(exifData, "F Number", metadata.get("F-Number"));
+            addIfNotEmpty(exifData, "ISO", metadata.get("ISO Speed Ratings"));
+            addIfNotEmpty(exifData, "Focal Length", metadata.get("Focal Length"));
+            addIfNotEmpty(exifData, "Flash", metadata.get("Flash"));
+            addIfNotEmpty(exifData, "White Balance", metadata.get("White Balance"));
+            addIfNotEmpty(exifData, "Orientation", metadata.get("Orientation"));
+            addIfNotEmpty(exifData, "X Resolution", metadata.get("X Resolution"));
+            addIfNotEmpty(exifData, "Y Resolution", metadata.get("Y Resolution"));
+            addIfNotEmpty(exifData, "Resolution Units", metadata.get("Resolution Units"));
+            addIfNotEmpty(exifData, "Software", metadata.get("Software"));
+            addIfNotEmpty(exifData, "Artist", metadata.get("Artist"));
+            addIfNotEmpty(exifData, "Copyright", metadata.get("Copyright Notice"));
 
             String gpsLatitude = metadata.get("GPS Latitude");
             String gpsLongitude = metadata.get("GPS Longitude");
             if (gpsLatitude != null || gpsLongitude != null) {
                 StringBuilder gps = new StringBuilder();
                 if (gpsLatitude != null) {
-                    gps.append("纬度: ").append(gpsLatitude);
+                    gps.append("Latitude: ").append(gpsLatitude);
                 }
                 if (gpsLongitude != null) {
                     if (gps.length() > 0) {
                         gps.append(", ");
                     }
-                    gps.append("经度: ").append(gpsLongitude);
+                    gps.append("Longitude: ").append(gpsLongitude);
                 }
-                exifData.put("GPS位置", gps.toString());
+                exifData.put("GPS Location", gps.toString());
             }
+
+            Tika tika = new Tika();
+            String detectedMimeType = tika.detect(filePath.toFile());
+            addIfNotEmpty(exifData, "Detected MIME Type", detectedMimeType);
         } catch (Exception e) {
             logger.debug("EXIF extraction error: {}", e.getMessage());
         }
@@ -193,7 +204,7 @@ public class ImageConverter implements DocumentConverter {
             tempFile = File.createTempFile("ocr_", ".png");
             ImageIO.write(image, "png", tempFile);
 
-            String language = options.getLanguage();
+            String language = options.ocr().language();
             if ("auto".equals(language) || language == null || language.isEmpty()) {
                 language = "eng+chi_sim";
             }
@@ -204,7 +215,8 @@ public class ImageConverter implements DocumentConverter {
                         "OCR engine '" + effectiveOcrEngine.getEngineName() + "' is unavailable. " +
                                 "Use the full build or configure another OCR engine.",
                         "image",
-                        getName());
+                        getName()
+                );
             }
 
             logger.info("Using OCR engine: {}", effectiveOcrEngine.getEngineName());
@@ -213,8 +225,7 @@ public class ImageConverter implements DocumentConverter {
         } catch (OcrException e) {
             throw new ConversionException("OCR processing failed: " + e.getMessage(), e, "image", getName());
         } catch (IOException e) {
-            throw new ConversionException("Failed to create temporary OCR file: " + e.getMessage(),
-                    e, "image", getName());
+            throw new ConversionException("Failed to create temporary OCR file: " + e.getMessage(), e, "image", getName());
         } finally {
             if (tempFile != null && tempFile.exists()) {
                 tempFile.delete();
@@ -236,18 +247,22 @@ public class ImageConverter implements DocumentConverter {
         StringBuilder markdown = new StringBuilder();
         String fileName = filePath.getFileName().toString();
 
-        markdown.append("# Image: ").append(getFileNameWithoutExtension(fileName)).append("\n\n");
+        markdown.append("# ").append(getFileNameWithoutExtension(fileName)).append("\n\n");
+        markdown.append("**File:** `").append(fileName).append("`\n\n");
 
-        if (options.isIncludeImages()) {
-            markdown.append("![").append(fileName).append("](").append(fileName).append(")\n\n");
+        if (options.content().includeImages()) {
+            markdown.append(renderImageReference(filePath, fileName, options)).append("\n\n");
         }
 
-        if (options.isIncludeMetadata() && !metadata.isEmpty()) {
+        if (options.content().includeMetadata() && !metadata.isEmpty()) {
             markdown.append("## Image Information\n\n");
             for (Map.Entry<String, Object> entry : metadata.entrySet()) {
                 if (entry.getValue() != null) {
-                    markdown.append("- **").append(MarkdownBuilder.prettifyMetadataKey(entry.getKey()))
-                            .append(":** ").append(entry.getValue()).append("\n");
+                    markdown.append("- **")
+                            .append(MarkdownBuilder.prettifyMetadataKey(entry.getKey()))
+                            .append(":** ")
+                            .append(entry.getValue())
+                            .append("\n");
                 }
             }
             markdown.append("\n");
@@ -269,6 +284,7 @@ public class ImageConverter implements DocumentConverter {
         if (text == null || text.trim().isEmpty()) {
             return "";
         }
+
         String[] paragraphs = text.split("\\n\\s*\\n");
         StringBuilder formatted = new StringBuilder();
         for (String paragraph : paragraphs) {
@@ -278,6 +294,49 @@ public class ImageConverter implements DocumentConverter {
             }
         }
         return formatted.toString();
+    }
+
+    private String renderImageReference(Path filePath, String fileName, ConversionOptions options) {
+        String imageFormat = options.format().image();
+        String format = imageFormat != null ? imageFormat.toLowerCase() : "markdown";
+        String title = "Source image";
+        switch (format) {
+            case "html":
+                return "<img src=\"" + fileName + "\" alt=\"" + fileName + "\" title=\"" + title + "\" />";
+            case "base64":
+                try {
+                    String mimeType = detectImageMimeType(fileName);
+                    String encoded = Base64.getEncoder().encodeToString(java.nio.file.Files.readAllBytes(filePath));
+                    return "![" + fileName + "](data:" + mimeType + ";base64," + encoded + ")";
+                } catch (IOException e) {
+                    logger.warn("Failed to inline image as base64, falling back to markdown reference: {}", e.getMessage());
+                    return "![" + fileName + "](" + fileName + ")";
+                }
+            case "markdown":
+            default:
+                return "![" + fileName + "](" + fileName + ")";
+        }
+    }
+
+    private String detectImageMimeType(String fileName) {
+        String extension = getFileExtension(fileName).toLowerCase();
+        switch (extension) {
+            case "jpg":
+            case "jpeg":
+                return "image/jpeg";
+            case "gif":
+                return "image/gif";
+            case "bmp":
+                return "image/bmp";
+            case "tif":
+            case "tiff":
+                return "image/tiff";
+            case "webp":
+                return "image/webp";
+            case "png":
+            default:
+                return "image/png";
+        }
     }
 
     private String getColorType(BufferedImage image) {

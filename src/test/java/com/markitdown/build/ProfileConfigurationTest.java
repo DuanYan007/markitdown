@@ -15,27 +15,25 @@ import static org.junit.jupiter.api.Assertions.*;
 class ProfileConfigurationTest {
 
     @Test
-    void containsExpectedPackagingProfiles() throws Exception {
+    void containsCurrentReleaseProfileOnly() throws Exception {
         Document pom = loadPom();
         Map<String, Element> profiles = readProfiles(pom);
 
-        assertTrue(profiles.containsKey("full"));
-        assertTrue(profiles.containsKey("win32"));
-        assertTrue(profiles.containsKey("win64"));
-        assertTrue(profiles.containsKey("linux64"));
-        assertTrue(profiles.containsKey("mac"));
+        assertEquals(1, profiles.size());
+        assertTrue(profiles.containsKey("release"));
     }
 
     @Test
-    void embedsTess4jOnlyForWindowsAndFullProfiles() throws Exception {
+    void usesShadePackagingAndDoesNotDependOnTess4j() throws Exception {
         Document pom = loadPom();
         Map<String, Element> profiles = readProfiles(pom);
 
-        assertTrue(profileContainsArtifact(profiles.get("full"), "tess4j"));
-        assertTrue(profileContainsArtifact(profiles.get("win32"), "tess4j"));
-        assertTrue(profileContainsArtifact(profiles.get("win64"), "tess4j"));
-        assertFalse(profileContainsArtifact(profiles.get("linux64"), "tess4j"));
-        assertFalse(profileContainsArtifact(profiles.get("mac"), "tess4j"));
+        assertTrue(profileContainsArtifact(profiles.get("release"), "maven-source-plugin"));
+        assertTrue(profileContainsArtifact(profiles.get("release"), "maven-javadoc-plugin"));
+        assertTrue(profileContainsArtifact(profiles.get("release"), "maven-gpg-plugin"));
+        assertTrue(documentContainsArtifact(pom, "maven-shade-plugin"));
+        assertTrue(documentContainsTagValue(pom, "mainClass", "com.markitdown.MarkItDownApplication"));
+        assertFalse(documentContainsArtifact(pom, "tess4j"));
     }
 
     private Document loadPom() throws Exception {
@@ -63,6 +61,26 @@ class ProfileConfigurationTest {
         NodeList artifactNodes = profile.getElementsByTagName("artifactId");
         for (int i = 0; i < artifactNodes.getLength(); i++) {
             if (artifactId.equals(artifactNodes.item(i).getTextContent().trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean documentContainsArtifact(Document pom, String artifactId) {
+        NodeList artifactNodes = pom.getElementsByTagName("artifactId");
+        for (int i = 0; i < artifactNodes.getLength(); i++) {
+            if (artifactId.equals(artifactNodes.item(i).getTextContent().trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean documentContainsTagValue(Document pom, String tagName, String expectedValue) {
+        NodeList nodes = pom.getElementsByTagName(tagName);
+        for (int i = 0; i < nodes.getLength(); i++) {
+            if (expectedValue.equals(nodes.item(i).getTextContent().trim())) {
                 return true;
             }
         }

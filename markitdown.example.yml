@@ -1,15 +1,15 @@
-app:
-  profile: default
+tesseract:
+  path: ""
 
-ocr:
-  enabled: false
-  engine: paddleocr
-  endpoint: ""
-  api_key: ""
-  model: ""
-  timeout: 30000
-  poll_interval: 5000
-  language: auto
+tessdata:
+  path: ""
+
+output:
+  dir: ./output
+  image_dir: assets
+  temp_dir: ""
+  organize_by_type: false
+  preserve_structure: false
 
 content:
   include_metadata: true
@@ -17,11 +17,15 @@ content:
   include_tables: true
   page_break_mode: heading
 
-output:
-  dir: ./output
-  image_dir: assets
-  preserve_structure: false
-  organize_by_type: false
+ocr:
+  enabled: false
+  engine: tesseract-cli
+  language: auto
+  endpoint: ""
+  api_key: ""
+  model: ""
+  timeout: 30000
+  poll_interval: 5000
 
 format:
   image: markdown
@@ -34,7 +38,13 @@ performance:
   max_file_size: 52428800
   batch_size: 20
 
-providers:
-  paddleocr:
-    job_endpoint: ""
-    result_format: markdown
+ui:
+  verbose: false
+  quiet: false
+  progress: false
+  stats: false
+
+files:
+  recursive: false
+  batch: false
+  large_file: false

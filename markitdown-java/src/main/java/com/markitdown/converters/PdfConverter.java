@@ -19,15 +19,20 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 import javax.imageio.ImageIO;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * @class PdfConverter
- * @brief PDF文档转换器，使用PDFBox提取文本内容
+ * Converter for PDF documents using PDFBox with OCR fallback support.
  */
 public class PdfConverter implements DocumentConverter {
 
@@ -35,28 +40,28 @@ public class PdfConverter implements DocumentConverter {
 
     @Override
     public ConversionResult convert(Path filePath, ConversionOptions options) throws ConversionException {
-        requireNonNull(filePath, "文件路径不能为空");
-        requireNonNull(options, "转换选项不能为空");
+        requireNonNull(filePath, "File path cannot be null");
+        requireNonNull(options, "Conversion options cannot be null");
         configurePdfBoxFontCache();
 
-        logger.info("正在转换PDF文件: {}", filePath);
+            logger.info("Converting PDF file: {}", filePath);
 
         try {
-            // 加载PDF文档
+            // Resolve the source PDF file.
             File pdfFile = filePath.toFile();
 
-            // 检查文件是否是有效的PDF
+            // Validate that the file starts with a PDF header.
             if (!isValidPDF(pdfFile)) {
-                throw new ConversionException("不是有效的PDF文件", filePath.getFileName().toString(), getName());
+                throw new ConversionException("The input file is not a valid PDF document.", filePath.getFileName().toString(), getName());
             }
 
-            // 使用PDFBox提取文本
+            // Extract text with PDFBox or the configured fallback path.
             String textContent = extractTextWithPDFBox(pdfFile, options);
 
-            // 处理元数据
+            // Extract document metadata when enabled.
             Map<String, Object> metadata = extractMetadata(pdfFile, options);
 
-            // 转换为Markdown
+            // Render the final Markdown document.
             String markdownContent = convertToMarkdown(textContent, metadata, options);
 
             List<String> warnings = new ArrayList<>();
@@ -72,7 +77,7 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 验证PDF文件有效性
+     * Validates that the file looks like a PDF.
      */
     private boolean isValidPDF(File pdfFile) throws IOException {
         try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(pdfFile, "r")) {
@@ -82,74 +87,73 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 使用PDFBox提取文本
+     * Extracts text with PDFBox and falls back when necessary.
      */
     private String extractTextWithPDFBox(File pdfFile, ConversionOptions options) throws IOException {
         try {
-            // 尝试初始化PDFTextStripper以检测GlyphList问题
+            // Probe PDFTextStripper early to surface GlyphList initialization issues.
             PDFTextStripper testStripper = new PDFTextStripper();
         } catch (ExceptionInInitializerError | NoClassDefFoundError | RuntimeException e) {
-            // PDFBox GlyphList资源缺失，使用备用方法
-            logger.warn("PDFBox GlyphList资源不可用，使用备用文本提取方法: {}", e.getMessage());
+            // Fall back when the bundled GlyphList resources are unavailable.
+            logger.warn("PDFBox GlyphList resources are unavailable. Falling back to raw text extraction: {}", e.getMessage());
             return extractTextFallback(pdfFile);
         }
 
-        // 获取密码
-        String password = (String) options.getCustomOption("pdfPassword");
+        // Load the optional PDF password from conversion options.
+        String password = options.document().pdfPassword();
 
         try (PDDocument document = password != null && !password.isEmpty()
                 ? PDDocument.load(pdfFile, password)
                 : PDDocument.load(pdfFile)) {
             PDFTextStripper textStripper = new PDFTextStripper();
 
-            // 设置文本提取选项
+            // Configure text extraction behavior for readable output.
             textStripper.setSortByPosition(true);
             textStripper.setLineSeparator("\n");
 
-            // 内存优化：分页处理大文件
+            // Use paged extraction for very large documents to reduce memory pressure.
             String text;
             int pageCount = document.getNumberOfPages();
-            if (pageCount > 100 && options.getMaxFileSize() == 0) {
-                // 大文件分页处理以减少内存占用
+            if (pageCount > 100 && options.limits().maxFileSize() == 0) {
+                // Process large documents in page batches.
                 text = extractTextInPages(document, textStripper, pageCount);
             } else {
-                // 普通文件一次性提取
+                // Extract smaller documents in a single pass.
                 text = textStripper.getText(document);
             }
 
-            // 如果文本为空且启用了OCR,则对扫描PDF进行OCR识别
-            if ((text == null || text.trim().isEmpty()) && options.isUseOcr()) {
-                logger.info("PDF文本为空,启用OCR进行扫描页面识别");
+            // Run OCR when text extraction returns empty content and OCR is enabled.
+            if ((text == null || text.trim().isEmpty()) && options.ocr().enabled()) {
+                logger.info("PDF text is empty. Running OCR on scanned pages.");
                 return extractTextFromScannedPdf(document, options);
             }
 
             if (text == null || text.trim().isEmpty()) {
-                return "*无法提取PDF文本内容。这可能是因为：*\n\n" +
-                       "1. PDF是扫描版图片格式\n" +
-                       "2. PDF使用了特殊编码\n" +
-                       "3. PDF文件损坏\n\n" +
-                       "*建议：使用 --ocr 选项对扫描PDF进行OCR识别*";
+                return "*Unable to extract PDF text content. This may happen because:*\n\n" +
+                       "1. The PDF contains scanned images instead of embedded text\n" +
+                       "2. The PDF uses unsupported text encoding\n" +
+                       "3. The PDF file is damaged\n\n" +
+                       "*Suggestion: enable `--ocr` to process scanned PDF pages.*";
             }
 
             return text;
         } catch (Exception e) {
-            logger.warn("使用PDFBox提取文本失败: {}", e.getMessage());
+            logger.warn("PDFBox text extraction failed: {}", e.getMessage());
             return extractTextFallback(pdfFile);
         }
     }
 
     /**
-     * 对扫描PDF进行OCR识别
+     * Runs OCR against rendered PDF pages.
      */
     private String extractTextFromScannedPdf(PDDocument document, ConversionOptions options) throws IOException {
         try {
-            logger.info("开始对扫描PDF进行OCR识别,共{}页", document.getNumberOfPages());
+            logger.info("Starting OCR for scanned PDF ({} pages)", document.getNumberOfPages());
 
             StringBuilder ocrText = new StringBuilder();
             PDFRenderer renderer = new PDFRenderer(document);
 
-            // 创建OCR引擎，使用配置文件中的路径
-            String tessdataPath = (String) options.getCustomOption("tessdataPath");
+            // Create the OCR engine using the current runtime configuration.
             OcrEngine ocrEngine = OcrEngineFactory.create(options);
             if (!ocrEngine.isAvailable()) {
                 return "*OCR engine is unavailable in the current build or environment.*\n\n" +
@@ -157,32 +161,32 @@ public class PdfConverter implements DocumentConverter {
             }
 
             for (int pageNum = 0; pageNum < document.getNumberOfPages(); pageNum++) {
-                logger.info("正在OCR识别第{}页...", pageNum + 1);
+                logger.info("Running OCR on page {}", pageNum + 1);
 
-                // 将PDF页面渲染为图像
+                // Render the current PDF page into an image.
                 BufferedImage image = renderer.renderImageWithDPI(pageNum, 300, ImageType.RGB);
 
-                // 保存临时图像文件用于OCR
+                // Persist a temporary page image for OCR processing.
                 File tempImage = File.createTempFile("pdf_page_", ".png");
                 try {
                     javax.imageio.ImageIO.write(image, "png", tempImage);
 
-                    // 执行OCR识别
+                    // Execute OCR on the rendered page image.
                     String pageText = ocrEngine.extractText(tempImage);
 
-                    // 立即清理每个页面的OCR结果
+                    // Immediately clean each page-level OCR result.
                     pageText = cleanupSinglePageText(pageText);
 
                     if (pageNum > 0) {
                         ocrText.append("\n\n");
                     }
-                    ocrText.append("### 第").append(pageNum + 1).append("页\n\n");
+                    ocrText.append("### Page ").append(pageNum + 1).append("\n\n");
                     ocrText.append(pageText);
 
-                    logger.info("第{}页OCR完成,提取{}字符", pageNum + 1, pageText.length());
+                    logger.info("OCR finished for page {} ({} characters)", pageNum + 1, pageText.length());
 
                 } finally {
-                    // 清理临时文件
+                    // Delete the temporary OCR image file.
                     if (tempImage.exists()) {
                         tempImage.delete();
                     }
@@ -192,35 +196,35 @@ public class PdfConverter implements DocumentConverter {
             String result = ocrText.toString();
 
             if (result.trim().isEmpty()) {
-                return "*OCR识别未提取到文本内容。可能原因:\n\n" +
-                       "1. PDF页面质量过低\n" +
-                       "2. 图像分辨率不足\n" +
-                       "3. 语言包不匹配\n\n" +
-                       "*建议: 检查PDF质量或使用更高DPI设置*";
+                return "*OCR did not extract any text. Possible reasons:*\n\n" +
+                       "1. The PDF page quality is too low\n" +
+                       "2. The rendered image resolution is insufficient\n" +
+                       "3. The selected OCR language pack does not match the document\n\n" +
+                       "*Suggestion: check PDF quality or increase the OCR DPI setting.*";
             }
 
             return result;
 
         } catch (Exception e) {
-            logger.error("扫描PDF OCR处理失败: {}", e.getMessage(), e);
-            return "*OCR处理失败: " + e.getMessage() + "\n\n" +
-                   "*建议: 确保Tesseract正确安装并配置了中文语言包*";
+            logger.error("Scanned PDF OCR failed: {}", e.getMessage(), e);
+            return "*OCR processing failed:* " + e.getMessage() + "\n\n" +
+                   "*Suggestion: verify the OCR engine configuration and required language packs.*";
         }
     }
 
     /**
-     * 分页提取PDF文本以减少内存占用
+     * Extracts text in page batches to reduce memory pressure.
      */
     private String extractTextInPages(PDDocument document, PDFTextStripper textStripper, int pageCount) {
         StringBuilder result = new StringBuilder();
 
         try {
-            // 每次处理20页，平衡性能和内存
+            // Process 20 pages per batch as a balance between speed and memory use.
             int batchSize = 20;
             for (int startPage = 0; startPage < pageCount; startPage += batchSize) {
                 int endPage = Math.min(startPage + batchSize, pageCount);
 
-                // 设置提取范围（页码从1开始）
+                // PDFTextStripper page numbers are 1-based.
                 textStripper.setStartPage(startPage + 1);
                 textStripper.setEndPage(endPage);
 
@@ -229,13 +233,13 @@ public class PdfConverter implements DocumentConverter {
                     result.append(pageText);
                 }
 
-                // 每50页清理一次内存
+                // Periodically hint to the JVM that memory can be reclaimed.
                 if (startPage % 50 == 0) {
                     System.gc();
                 }
             }
         } catch (IOException e) {
-            logger.warn("分页提取失败，回退到一次性提取: {}", e.getMessage());
+            logger.warn("Paged PDF extraction failed. Falling back to single-pass extraction: {}", e.getMessage());
             try {
                 return textStripper.getText(document);
             } catch (IOException ex) {
@@ -247,15 +251,15 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 备用文本提取方法 - 从PDF中提取原始文本字符串
+     * Fallback text extraction that scans raw PDF content for embedded strings.
      */
     private String extractTextFallback(File pdfFile) {
         try {
-            // 读取PDF文件内容
+            // Read the raw PDF bytes as a Latin-1 string for token scanning.
             byte[] fileBytes = java.nio.file.Files.readAllBytes(pdfFile.toPath());
             String content = new String(fileBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
 
-            // 提取文本字符串（在PDF中，文本在括号()之间）
+            // Collect text tokens that appear between literal string parentheses.
             StringBuilder text = new StringBuilder();
             boolean inText = false;
             boolean inStream = false;
@@ -265,7 +269,7 @@ public class PdfConverter implements DocumentConverter {
                 char c = content.charAt(i);
                 char next = content.charAt(i + 1);
 
-                // 跳过流对象
+                // Skip stream bodies because they are usually compressed or binary.
                 if (c == 's' && next == 't' && i + 5 < content.length() &&
                     content.substring(i, i + 6).equals("stream")) {
                     inStream = true;
@@ -281,14 +285,14 @@ public class PdfConverter implements DocumentConverter {
 
                 if (inStream) continue;
 
-                // 查找文本字符串开始
+                // Detect the start of a literal PDF string.
                 if (c == '(' && next != ')') {
                     inText = true;
                     currentText.setLength(0);
                     continue;
                 }
 
-                // 查找文本字符串结束
+                // Detect the end of a literal PDF string.
                 if (c == ')' && inText) {
                     inText = false;
                     String decoded = decodePDFString(currentText.toString());
@@ -298,30 +302,30 @@ public class PdfConverter implements DocumentConverter {
                     continue;
                 }
 
-                // 收集文本字符
+                // Accumulate text characters inside the current string.
                 if (inText) {
                     currentText.append(c);
                 }
             }
 
             if (text.length() == 0) {
-                return "*无法提取PDF文本内容。这可能是因为：*\n\n" +
-                       "1. PDF是扫描版图片格式\n" +
-                       "2. PDF使用了特殊编码\n" +
-                       "3. PDF文件损坏\n\n" +
-                       "*建议：尝试使用OCR工具处理扫描版PDF*";
+                return "*Unable to extract PDF text content. This may happen because:*\n\n" +
+                       "1. The PDF contains scanned images instead of embedded text\n" +
+                       "2. The PDF uses unsupported text encoding\n" +
+                       "3. The PDF file is damaged\n\n" +
+                       "*Suggestion: try enabling OCR to process scanned PDF pages.*";
             }
 
             return formatExtractedText(text.toString());
 
         } catch (Exception e) {
-            logger.error("备用文本提取失败: {}", e.getMessage());
-            return "*PDF文本提取功能当前不可用。请确保PDF文件不是扫描版图片格式。*";
+            logger.error("Fallback PDF text extraction failed: {}", e.getMessage());
+            return "*PDF text extraction is currently unavailable. Please verify that the PDF is not only scanned image content.*";
         }
     }
 
     /**
-     * 解码PDF字符串（处理转义序列）
+     * Decodes PDF literal strings including common escape sequences.
      */
     private String decodePDFString(String str) {
         StringBuilder decoded = new StringBuilder();
@@ -332,7 +336,7 @@ public class PdfConverter implements DocumentConverter {
             if (c == '\\' && i + 1 < str.length()) {
                 char next = str.charAt(i + 1);
 
-                // 处理转义字符
+                // Handle PDF escape sequences.
                 switch (next) {
                     case 'n':
                         decoded.append('\n');
@@ -367,7 +371,7 @@ public class PdfConverter implements DocumentConverter {
                         i++;
                         break;
                     default:
-                        // 处理八进制转义 \ddd
+                        // Handle octal escapes such as \ddd.
                         if (i + 3 < str.length() && Character.isDigit(next)) {
                             String octal = str.substring(i + 1, Math.min(i + 4, str.length()));
                             try {
@@ -395,7 +399,7 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 检查字符串是否主要是可打印字符
+     * Returns whether a decoded string is mostly printable text.
      */
     private boolean isMostlyPrintable(String str) {
         if (str.length() == 0) return false;
@@ -411,13 +415,13 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 格式化提取的文本
+     * Applies light formatting to fallback-extracted text.
      */
     private String formatExtractedText(String text) {
-        // 清理多余空格
+        // Collapse repeated whitespace first.
         text = text.replaceAll("\\s+", " ");
 
-        // 添加换行符以提高可读性
+        // Insert paragraph breaks after sentence-ending punctuation.
         text = text.replaceAll("\\.\\s+", ".\n\n");
         text = text.replaceAll("!\\s+", "!\n\n");
         text = text.replaceAll("\\?\\s+", "?\n\n");
@@ -426,25 +430,25 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 提取元数据
+     * Extracts PDF metadata when available.
      */
     private Map<String, Object> extractMetadata(File pdfFile, ConversionOptions options) {
         Map<String, Object> metadata = new HashMap<>();
 
-        if (options.isIncludeMetadata()) {
+        if (options.content().includeMetadata()) {
             metadata.put("File Name", pdfFile.getName());
             metadata.put("File Size", pdfFile.length());
             metadata.put("Converted At", LocalDateTime.now());
 
-            // 获取密码
-            String password = (String) options.getCustomOption("pdfPassword");
+            // Load the optional PDF password from conversion options.
+            String password = options.document().pdfPassword();
 
             try (PDDocument document = password != null && !password.isEmpty()
                     ? PDDocument.load(pdfFile, password)
                     : PDDocument.load(pdfFile)) {
                 metadata.put("Pages", document.getNumberOfPages());
 
-                // 提取文档信息
+                // Read document information entries exposed by PDFBox.
                 if (document.getDocumentInformation() != null) {
                     String title = document.getDocumentInformation().getTitle();
                     String author = document.getDocumentInformation().getAuthor();
@@ -461,7 +465,7 @@ public class PdfConverter implements DocumentConverter {
                     if (producer != null && !producer.isEmpty()) metadata.put("PDF Producer", producer);
                 }
             } catch (Exception e) {
-                logger.warn("无法读取PDF元数据: {}", e.getMessage());
+                logger.warn("Unable to read PDF metadata: {}", e.getMessage());
             }
         }
 
@@ -469,13 +473,13 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 转换为Markdown格式
+     * Builds the final Markdown document.
      */
     private String convertToMarkdown(String textContent, Map<String, Object> metadata, ConversionOptions options) {
         StringBuilder markdown = new StringBuilder();
 
-        // 添加元数据部分（如果启用）
-        if (options.isIncludeMetadata() && !metadata.isEmpty()) {
+        // Add metadata when requested.
+        if (options.content().includeMetadata() && !metadata.isEmpty()) {
             markdown.append("## Document Information\n\n");
             for (Map.Entry<String, Object> entry : metadata.entrySet()) {
                 if (entry.getValue() != null) {
@@ -486,120 +490,158 @@ public class PdfConverter implements DocumentConverter {
             markdown.append("\n");
         }
 
-        // 添加主要内容
+        // Add the main content section.
         markdown.append("## Content\n\n");
 
         if (textContent != null && !textContent.trim().isEmpty()) {
-            markdown.append(formatTextContent(textContent));
+            markdown.append(formatTextContent(applyPageBreakMode(textContent, options)));
         } else {
-            markdown.append("*无法提取PDF文本内容。这可能是因为：*\n\n");
-            markdown.append("1. PDF是扫描版图片格式\n");
-            markdown.append("2. PDF使用了特殊编码\n");
-            markdown.append("3. PDF文件损坏\n\n");
-            markdown.append("*建议：尝试使用OCR工具处理扫描版PDF*");
+            markdown.append("*Unable to extract PDF text content. This may happen because:*\n\n");
+            markdown.append("1. The PDF contains scanned images instead of embedded text\n");
+            markdown.append("2. The PDF uses unsupported text encoding\n");
+            markdown.append("3. The PDF file is damaged\n\n");
+            markdown.append("*Suggestion: try enabling OCR or using another PDF extraction strategy.*");
         }
 
         return markdown.toString();
     }
 
+    private String resolvePageSeparator(ConversionOptions options) {
+        String mode = options.content().pageBreakMode();
+        if (mode == null || mode.trim().isEmpty()) {
+            mode = "heading";
+        }
+
+        switch (mode.toLowerCase(Locale.ROOT)) {
+            case "rule":
+                return "\n\n---\n\n";
+            case "blank":
+                return "\n\n";
+            case "none":
+                return "\n";
+            case "heading":
+            default:
+                return "\n\n--- Page Break ---\n\n";
+        }
+    }
+
+    private String applyPageBreakMode(String textContent, ConversionOptions options) {
+        if (textContent == null || textContent.isEmpty()) {
+            return textContent;
+        }
+        return textContent.replace("\f", resolvePageSeparator(options));
+    }
+
     /**
-     * 格式化文本内容
+     * Formats extracted text into more readable Markdown paragraphs.
      */
     private String formatTextContent(String textContent) {
         if (textContent == null || textContent.trim().isEmpty()) {
             return "";
         }
 
-        // 清理文本
+        // Normalize the raw extracted text first.
         String cleaned = cleanupText(textContent);
 
         StringBuilder formatted = new StringBuilder();
 
-        // 按行处理
+        // Process the text line by line.
         String[] lines = cleaned.split("\n");
 
         for (int i = 0; i < lines.length; i++) {
-            String line = lines[i].trim();
+            String line = normalizeExtractedLine(lines[i].trim());
 
             if (line.isEmpty()) {
-                // 添加段落分隔
+                // Preserve paragraph separation.
                 formatted.append("\n\n");
                 continue;
             }
 
-            // 检查是否可能是标题
+            // Detect likely headings.
             if (isHeadingLine(line)) {
-                // 在标题前添加额外间距
+                // Add extra spacing before headings when needed.
                 if (formatted.length() > 0 && !formatted.toString().endsWith("\n\n\n")) {
                     formatted.append("\n");
                 }
                 formatted.append("### ").append(line).append("\n\n");
             }
-            // 检查是否是列表项
+            // Preserve list items as one line each.
             else if (isListItem(line)) {
                 formatted.append(line).append("\n");
             }
-            // 普通段落文本
+            // Treat everything else as paragraph text.
             else {
-                // 如果下一行存在且不为空，这可能是续行
+                // Join lines that appear to continue the same paragraph.
                 if (i + 1 < lines.length && !lines[i + 1].trim().isEmpty() &&
                     !isHeadingLine(lines[i + 1].trim()) && !isListItem(lines[i + 1].trim())) {
-                    // 继续当前段落
+                    // Continue the current paragraph.
                     formatted.append(line).append(" ");
                 } else {
-                    // 段落结束
+                    // Close the current paragraph.
                     formatted.append(line).append("\n\n");
                 }
             }
         }
 
-        // 清理多余的换行符
+        // Collapse excessive blank lines after formatting.
         String result = formatted.toString();
         result = result.replaceAll("\\n{3,}", "\n\n");
 
         return result.trim();
     }
 
+    private String normalizeExtractedLine(String line) {
+        if (line == null || line.isEmpty()) {
+            return line;
+        }
+
+        String normalized = line;
+        normalized = normalized.replaceFirst("^\\s*[^\\x00-\\x7F]{1,6}\\??\\s*", "- ");
+        normalized = normalized.replaceFirst("^\\s*[^\\p{L}\\p{N}\\s]{1,3}\\s*", "- ");
+        normalized = normalized.replaceFirst("^-\\s*\\?\\s*", "- ");
+        return normalized;
+    }
+
     /**
-     * 清理文本
+     * Normalizes raw extracted text before Markdown formatting.
      */
     private String cleanupText(String text) {
         if (text == null || text.trim().isEmpty()) {
             return "";
         }
 
-        // 修复常见的PDF提取问题
-        String cleaned = text.replaceAll("-\\s+", "-"); // 修复连字符
-        cleaned = cleaned.replaceAll("\\s*\\f\\s*", "\n\n"); // 换页符转换为段落分隔
-        cleaned = cleaned.replaceAll("\\r\\n", "\n"); // 标准化Windows换行符
-        cleaned = cleaned.replaceAll("\\r", "\n"); // 标准化Mac换行符
+        // Repair a few common PDF extraction artifacts.
+        String cleaned = text.replaceAll("-\\s+", "-"); // Repair broken hyphenated words.
+        cleaned = cleaned.replaceAll("\\s*\\f\\s*", "\n\n"); // Convert form feeds into paragraph breaks.
+        cleaned = cleaned.replaceAll("\\r\\n", "\n"); // Normalize Windows line endings.
+        cleaned = cleaned.replaceAll("\\r", "\n"); // Normalize legacy Mac line endings.
 
-        // 处理连续的空行（超过2个换行符）
+        // Collapse long runs of blank lines.
         cleaned = cleaned.replaceAll("\\n{3,}", "\n\n");
 
         return cleaned.trim();
     }
 
     /**
-     * 判断是否是标题行
+     * Heuristically detects heading-like lines.
      */
     private boolean isHeadingLine(String line) {
         if (line == null || line.trim().isEmpty()) {
             return false;
         }
 
-        // 编号标题，如"1. Introduction"
+        // Numbered headings such as "1. Introduction".
         if (line.matches("^\\d+\\.\\s+.*")) {
             return true;
         }
 
-        // 全大写标题（短于80字符）
+        // Short all-caps headings.
         if (line.length() < 80 && line.equals(line.toUpperCase()) &&
             line.matches(".*[A-Z].*") && !line.matches(".*[a-z].*")) {
             return true;
         }
 
-        // 标题大小写（首字母大写，相对较短）
+        // Short title-cased lines without strong sentence punctuation.
         if (line.length() < 100 && Character.isUpperCase(line.charAt(0)) &&
             !line.matches(".*\\.$") && !line.contains(",")) {
             return true;
@@ -609,19 +651,19 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 判断是否是列表项
+     * Detects Markdown-style list items.
      */
     private boolean isListItem(String line) {
         if (line == null || line.trim().isEmpty()) {
             return false;
         }
 
-        // 项目符号列表
-        if (line.matches("^\\s*[-•*]\\s+.*")) {
+        // Bullet lists.
+        if (line.matches("^\\s*[-\u2022]\\s+.*")) {
             return true;
         }
 
-        // 编号列表
+        // Numbered lists.
         if (line.matches("^\\s*\\d+[.)]\\s+.*")) {
             return true;
         }
@@ -630,7 +672,7 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 格式化元数据键
+     * Formats metadata keys for display.
      */
     private String formatMetadataKey(String key) {
         return com.markdown.engine.MarkdownBuilder.prettifyMetadataKey(key);
@@ -666,14 +708,14 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 清理单个页面的OCR文本
+     * Cleans OCR text for a single rendered page.
      */
     private String cleanupSinglePageText(String pageText) {
         if (pageText == null || pageText.trim().isEmpty()) {
             return pageText;
         }
 
-        // 按行分割并去重
+        // Split into lines and remove near-duplicates.
         String[] lines = pageText.split("\\n");
         List<String> uniqueLines = new ArrayList<>();
         String lastLine = "";
@@ -684,11 +726,11 @@ public class PdfConverter implements DocumentConverter {
                 continue;
             }
 
-            // 检查是否与上一行高度相似
+            // Skip lines that are highly similar to the previous one.
             if (!lastLine.isEmpty() && trimmed.length() > 8) {
                 double similarity = calculateSimilarity(trimmed, lastLine);
                 if (similarity > 0.80) {
-                    continue; // 跳过重复行
+                    continue; // Skip highly similar duplicate lines.
                 }
             }
 
@@ -700,21 +742,21 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 清理OCR识别的文本，去除重复和格式问题
+     * Cleans OCR output across all pages by reducing duplication and noise.
      */
     private String cleanupOcrText(String ocrText) {
         if (ocrText == null || ocrText.trim().isEmpty()) {
             return ocrText;
         }
 
-        // 先按页分割
-        String[] pages = ocrText.split("### 第\\d+页");
+        // Split the OCR output into page-sized chunks first.
+        String[] pages = ocrText.split("### Page \\d+");
         List<String> cleanedPages = new ArrayList<>();
 
         for (String page : pages) {
             if (page.trim().isEmpty()) continue;
 
-            // 按行处理
+            // Process the page line by line.
             String[] lines = page.split("\\n");
             List<String> cleanedLines = new ArrayList<>();
             String lastLine = "";
@@ -722,20 +764,20 @@ public class PdfConverter implements DocumentConverter {
             for (String line : lines) {
                 String trimmed = line.trim();
                 if (trimmed.isEmpty()) {
-                    continue; // 跳过空行
+                    continue; // Skip blank lines.
                 }
 
-                // 跳过页面标题行
+                // Preserve page header lines.
                 if (trimmed.startsWith("###")) {
                     cleanedLines.add(line);
                     continue;
                 }
 
-                // 检查是否与上一行高度相似（超过75%相似度就认为是重复）
+                // Skip lines that are too similar to the previous cleaned line.
                 if (!lastLine.isEmpty() && trimmed.length() > 10) {
                     double similarity = calculateSimilarity(trimmed, lastLine);
                     if (similarity > 0.75) {
-                        // 跳过高相似度的行
+                        // Drop highly repetitive lines.
                         continue;
                     }
                 }
@@ -749,13 +791,13 @@ public class PdfConverter implements DocumentConverter {
             }
         }
 
-        // 重新组合页面，添加页面标题
+        // Reassemble the cleaned pages with page headers.
         StringBuilder result = new StringBuilder();
         for (int i = 0; i < cleanedPages.size(); i++) {
             if (i > 0) {
                 result.append("\n\n");
             }
-            result.append("### 第").append(i + 1).append("页\n\n");
+            result.append("### Page ").append(i + 1).append("\\n\\n");
             result.append(cleanedPages.get(i));
         }
 
@@ -763,7 +805,7 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 去除段落内的重复行
+     * Removes duplicate lines within a paragraph-sized block.
      */
     private String removeDuplicateLines(String paragraph) {
         String[] lines = paragraph.split("\\n");
@@ -782,14 +824,14 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 去除过度重复的句子
+     * Reduces repeated OCR sentences while keeping a small amount of context.
      */
     private String removeRepeatedSentences(String text) {
         if (text == null || text.isEmpty()) {
             return text;
         }
 
-        // 按行分割，因为OCR通常按行识别
+        // OCR output is typically line-oriented, so compare line by line.
         String[] lines = text.split("\\n");
         List<String> result = new ArrayList<>();
         String lastLine = "";
@@ -802,10 +844,10 @@ public class PdfConverter implements DocumentConverter {
                 continue;
             }
 
-            // 检查是否与上一行相同或高度相似
+            // Detect repeated or highly similar lines.
             if (trimmed.length() > 10 && calculateSimilarity(trimmed, lastLine) > 0.85) {
                 repeatCount++;
-                // 只保留前2次重复
+                // Keep only the first two occurrences.
                 if (repeatCount <= 2) {
                     result.add(line);
                 }
@@ -820,7 +862,7 @@ public class PdfConverter implements DocumentConverter {
     }
 
     /**
-     * 计算两个字符串的相似度（简单版本）
+     * Computes a simple similarity score between two strings.
      */
     private double calculateSimilarity(String s1, String s2) {
         if (s1 == null || s2 == null) return 0.0;
@@ -829,12 +871,12 @@ public class PdfConverter implements DocumentConverter {
         int maxLen = Math.max(s1.length(), s2.length());
         if (maxLen == 0) return 0.0;
 
-        // 简单的编辑距离近似
+        // Approximate similarity from normalized edit distance.
         return (maxLen - levenshteinDistance(s1, s2)) / (double) maxLen;
     }
 
     /**
-     * 简单的编辑距离计算
+     * Computes the Levenshtein edit distance between two strings.
      */
     private int levenshteinDistance(String s1, String s2) {
         int[][] dp = new int[s1.length() + 1][s2.length() + 1];

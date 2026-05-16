@@ -1,7 +1,7 @@
 package com.markitdown.ocr;
 
 /**
- * OCR处理异常
+ * Exception raised when OCR processing fails.
  */
 public class OcrException extends Exception {
     public OcrException(String message) {

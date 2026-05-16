@@ -29,9 +29,10 @@ public class HttpOcrEngine implements OcrEngine {
     private final HttpClient httpClient;
 
     public HttpOcrEngine(ConversionOptions options) {
-        this.endpoint = options.getOcrEndpoint();
-        this.apiKey = options.getOcrApiKey();
-        this.timeoutMs = options.getOcrTimeout();
+        ConversionOptions.OcrOptions ocr = options.ocr();
+        this.endpoint = ocr.endpoint();
+        this.apiKey = ocr.apiKey();
+        this.timeoutMs = ocr.timeout();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(Math.max(timeoutMs, 1000)))
                 .build();

@@ -1,10 +1,20 @@
 package com.markitdown.converters;
 
+import com.markdown.engine.MarkdownBuilder;
 import com.markitdown.api.ConversionResult;
 import com.markitdown.api.DocumentConverter;
 import com.markitdown.config.ConversionOptions;
 import com.markitdown.exceptions.ConversionException;
-import org.apache.poi.xslf.usermodel.*;
+import org.apache.poi.xslf.usermodel.XMLSlideShow;
+import org.apache.poi.xslf.usermodel.XSLFGroupShape;
+import org.apache.poi.xslf.usermodel.XSLFShape;
+import org.apache.poi.xslf.usermodel.XSLFSlide;
+import org.apache.poi.xslf.usermodel.XSLFTable;
+import org.apache.poi.xslf.usermodel.XSLFTableCell;
+import org.apache.poi.xslf.usermodel.XSLFTableRow;
+import org.apache.poi.xslf.usermodel.XSLFTextParagraph;
+import org.apache.poi.xslf.usermodel.XSLFTextRun;
+import org.apache.poi.xslf.usermodel.XSLFTextShape;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,20 +23,15 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * @class PptxConverter
- * @brief PowerPoint文档转换器，用于将PPTX文件转换为Markdown格式
- * @details 使用Apache POI库解析PowerPoint文档，提取幻灯片内容和结构信息
- *          支持文本格式、表格、分组形状等元素的转换
- *          保持演示文稿的幻灯片顺序和层次结构
- *
- * @author duan yan
- * @version 2.0.0
- * @since 2.0.0
+ * Converts PPTX presentations into Markdown.
  */
 public class PptxConverter implements DocumentConverter {
 
@@ -39,20 +44,19 @@ public class PptxConverter implements DocumentConverter {
 
         logger.info("Converting PPTX file: {}", filePath);
 
-        try (FileInputStream fis = new FileInputStream(filePath.toFile());
-             XMLSlideShow pptx = new XMLSlideShow(fis)) {
+        try (FileInputStream input = new FileInputStream(filePath.toFile());
+             XMLSlideShow presentation = new XMLSlideShow(input)) {
 
-            // Extract metadata
-            Map<String, Object> metadata = extractMetadata(pptx, options);
+            Map<String, Object> metadata = extractMetadata(presentation, options, filePath);
+            String markdownContent = convertToMarkdown(presentation, metadata, options);
 
-            // Convert presentation to Markdown
-            String markdownContent = convertToMarkdown(pptx, metadata, options);
-
-            List<String> warnings = new ArrayList<>();
-
-            return new ConversionResult(markdownContent, metadata, warnings,
-                    filePath.toFile().length(), filePath.getFileName().toString());
-
+            return new ConversionResult(
+                    markdownContent,
+                    metadata,
+                    new ArrayList<>(),
+                    filePath.toFile().length(),
+                    filePath.getFileName().toString()
+            );
         } catch (IOException e) {
             String errorMessage = "Failed to process PPTX file: " + e.getMessage();
             logger.error(errorMessage, e);
@@ -62,8 +66,8 @@ public class PptxConverter implements DocumentConverter {
 
     @Override
     public boolean supports(String mimeType) {
-        return "application/vnd.openxmlformats-officedocument.presentationml.presentation".equals(mimeType) ||
-               "application/vnd.ms-powerpoint".equals(mimeType);
+        return "application/vnd.openxmlformats-officedocument.presentationml.presentation".equals(mimeType)
+                || "application/vnd.ms-powerpoint".equals(mimeType);
     }
 
     @Override
@@ -76,143 +80,85 @@ public class PptxConverter implements DocumentConverter {
         return "PptxConverter";
     }
 
-    /**
-     * Extracts metadata from the PowerPoint presentation.
-     *
-     * @param pptx    the PowerPoint presentation
-     * @param options conversion options
-     * @return metadata map
-     */
-    private Map<String, Object> extractMetadata(XMLSlideShow pptx, ConversionOptions options) {
-        Map<String, Object> metadata = new HashMap<>();
-
-        if (options.isIncludeMetadata()) {
-            // Presentation statistics
-            metadata.put("slideCount", pptx.getSlides().size());
-            metadata.put("conversionTime", LocalDateTime.now());
-
-            // Slide size information
-            Dimension pageSize = pptx.getPageSize();
-            metadata.put("slideWidth", pageSize.width);
-            metadata.put("slideHeight", pageSize.height);
+    private Map<String, Object> extractMetadata(XMLSlideShow presentation, ConversionOptions options, Path filePath) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (!options.content().includeMetadata()) {
+            return metadata;
         }
 
+        metadata.put("Slide Count", presentation.getSlides().size());
+        Dimension pageSize = presentation.getPageSize();
+        if (pageSize != null) {
+            metadata.put("Slide Width", pageSize.width);
+            metadata.put("Slide Height", pageSize.height);
+        }
+        metadata.put("File Name", filePath.getFileName().toString());
+        metadata.put("File Size", filePath.toFile().length());
+        metadata.put("Converted At", LocalDateTime.now());
         return metadata;
     }
 
-    /**
-     * Converts PowerPoint presentation to Markdown format.
-     *
-     * @param pptx     the PowerPoint presentation
-     * @param metadata the document metadata
-     * @param options  conversion options
-     * @return Markdown formatted content
-     */
-    private String convertToMarkdown(XMLSlideShow pptx, Map<String, Object> metadata, ConversionOptions options) {
+    private String convertToMarkdown(XMLSlideShow presentation, Map<String, Object> metadata, ConversionOptions options) {
         StringBuilder markdown = new StringBuilder();
 
-        // Add title if available
-        if (options.isIncludeMetadata() && metadata.containsKey("title")) {
-            String title = (String) metadata.get("title");
-            if (title != null && !title.trim().isEmpty()) {
-                markdown.append("# ").append(title.trim()).append("\n\n");
-            }
-        }
-
-        // Add metadata section if enabled
-        if (options.isIncludeMetadata() && !metadata.isEmpty()) {
+        if (options.content().includeMetadata() && !metadata.isEmpty()) {
             markdown.append("## Presentation Information\n\n");
             for (Map.Entry<String, Object> entry : metadata.entrySet()) {
                 if (entry.getValue() != null) {
-                    markdown.append("- **").append(formatMetadataKey(entry.getKey()))
-                            .append(":** ").append(entry.getValue()).append("\n");
+                    markdown.append("- **")
+                            .append(entry.getKey())
+                            .append(":** ")
+                            .append(entry.getValue())
+                            .append("\n");
                 }
             }
             markdown.append("\n");
         }
 
-        // Process slides
-        List<XSLFSlide> slides = pptx.getSlides();
-        for (int i = 0; i < slides.size(); i++) {
-            processSlide(slides.get(i), i + 1, markdown, options);
+        List<XSLFSlide> slides = presentation.getSlides();
+        for (int slideIndex = 0; slideIndex < slides.size(); slideIndex++) {
+            processSlide(slides.get(slideIndex), slideIndex + 1, markdown, options);
         }
 
         return markdown.toString();
     }
 
-    /**
-     * Processes a single slide and converts it to Markdown.
-     *
-     * @param slide    the slide to process
-     * @param slideNum the slide number (1-based)
-     * @param markdown the markdown output builder
-     * @param options  conversion options
-     */
-    private void processSlide(XSLFSlide slide, int slideNum, StringBuilder markdown, ConversionOptions options) {
-        markdown.append("## Slide ").append(slideNum).append("\n\n");
-
-        // Process slide title and content
+    private void processSlide(XSLFSlide slide, int slideNumber, StringBuilder markdown, ConversionOptions options) {
+        markdown.append("## Slide ").append(slideNumber).append("\n\n");
         processSlideShapes(slide, markdown, options);
-
         markdown.append("---\n\n");
     }
 
-    /**
-     * Processes all shapes in a slide.
-     *
-     * @param slide    the slide containing shapes
-     * @param markdown the markdown output builder
-     * @param options  conversion options
-     */
     private void processSlideShapes(XSLFSlide slide, StringBuilder markdown, ConversionOptions options) {
         for (XSLFShape shape : slide.getShapes()) {
             if (shape instanceof XSLFTextShape) {
-                processTextShape((XSLFTextShape) shape, markdown, options);
-            } else if (shape instanceof XSLFTable && options.isIncludeTables()) {
-                processTable((XSLFTable) shape, markdown, options);
+                processTextShape((XSLFTextShape) shape, markdown);
+            } else if (shape instanceof XSLFTable && options.content().includeTables()) {
+                processTable((XSLFTable) shape, markdown);
             } else if (shape instanceof XSLFGroupShape) {
                 processGroupShape((XSLFGroupShape) shape, markdown, options);
             }
         }
     }
 
-    /**
-     * Processes a text shape and converts it to Markdown.
-     *
-     * @param textShape the text shape to process
-     * @param markdown  the markdown output builder
-     * @param options   conversion options
-     */
-    private void processTextShape(XSLFTextShape textShape, StringBuilder markdown, ConversionOptions options) {
-        List<XSLFTextParagraph> paragraphs = textShape.getTextParagraphs();
-
-        for (XSLFTextParagraph paragraph : paragraphs) {
+    private void processTextShape(XSLFTextShape textShape, StringBuilder markdown) {
+        for (XSLFTextParagraph paragraph : textShape.getTextParagraphs()) {
             String text = paragraph.getText();
             if (text == null || text.trim().isEmpty()) {
                 continue;
             }
 
-            // Determine if this is a title based on position or formatting
-            boolean isTitle = isTitleShape(textShape, paragraph);
-
-            if (isTitle) {
+            if (isTitleParagraph(textShape, paragraph)) {
                 markdown.append("### ").append(text.trim()).append("\n\n");
             } else {
-                // Process paragraph with formatting
-                String formattedText = processTextParagraph(paragraph);
-                if (!formattedText.trim().isEmpty()) {
-                    markdown.append(formattedText).append("\n\n");
+                String formatted = processTextParagraph(paragraph);
+                if (!formatted.trim().isEmpty()) {
+                    markdown.append(formatted).append("\n\n");
                 }
             }
         }
     }
 
-    /**
-     * Processes a text paragraph with formatting.
-     *
-     * @param paragraph the text paragraph
-     * @return formatted text
-     */
     private String processTextParagraph(XSLFTextParagraph paragraph) {
         StringBuilder formatted = new StringBuilder();
 
@@ -222,7 +168,6 @@ public class PptxConverter implements DocumentConverter {
                 continue;
             }
 
-            // Apply formatting
             if (run.isBold() && run.isItalic()) {
                 formatted.append("***").append(runText).append("***");
             } else if (run.isBold()) {
@@ -241,18 +186,7 @@ public class PptxConverter implements DocumentConverter {
         return formatted.toString();
     }
 
-    /**
-     * Processes a table and converts it to Markdown.
-     *
-     * @param table    the table to process
-     * @param markdown the markdown output builder
-     * @param options  conversion options
-     */
-    private void processTable(XSLFTable table, StringBuilder markdown, ConversionOptions options) {
-        if (!options.isIncludeTables()) {
-            return;
-        }
-
+    private void processTable(XSLFTable table, StringBuilder markdown) {
         List<XSLFTableRow> rows = table.getRows();
         if (rows.isEmpty()) {
             return;
@@ -260,27 +194,22 @@ public class PptxConverter implements DocumentConverter {
 
         markdown.append("\n");
 
-        // Process each row
-        for (int i = 0; i < rows.size(); i++) {
-            XSLFTableRow row = rows.get(i);
+        for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
+            XSLFTableRow row = rows.get(rowIndex);
             List<XSLFTableCell> cells = row.getCells();
-
             if (cells.isEmpty()) {
                 continue;
             }
 
-            // Create table row
             markdown.append("| ");
             for (XSLFTableCell cell : cells) {
-                String cellText = cell.getText().replace("\n", " ").trim();
-                markdown.append(cellText).append(" | ");
+                markdown.append(cell.getText().replace("\n", " ").trim()).append(" | ");
             }
             markdown.append("\n");
 
-            // Add header separator after first row
-            if (i == 0) {
+            if (rowIndex == 0) {
                 markdown.append("|");
-                for (int j = 0; j < cells.size(); j++) {
+                for (int columnIndex = 0; columnIndex < cells.size(); columnIndex++) {
                     markdown.append(" --- |");
                 }
                 markdown.append("\n");
@@ -290,72 +219,42 @@ public class PptxConverter implements DocumentConverter {
         markdown.append("\n");
     }
 
-    /**
-     * Processes a group shape by processing its contained shapes.
-     *
-     * @param groupShape the group shape to process
-     * @param markdown   the markdown output builder
-     * @param options    conversion options
-     */
     private void processGroupShape(XSLFGroupShape groupShape, StringBuilder markdown, ConversionOptions options) {
         for (XSLFShape shape : groupShape.getShapes()) {
             if (shape instanceof XSLFTextShape) {
-                processTextShape((XSLFTextShape) shape, markdown, options);
-            } else if (shape instanceof XSLFTable && options.isIncludeTables()) {
-                processTable((XSLFTable) shape, markdown, options);
+                processTextShape((XSLFTextShape) shape, markdown);
+            } else if (shape instanceof XSLFTable && options.content().includeTables()) {
+                processTable((XSLFTable) shape, markdown);
             }
         }
     }
 
-    /**
-     * Determines if a text shape is likely a title based on its properties.
-     *
-     * @param textShape the text shape to check
-     * @param paragraph the text paragraph
-     * @return true if it's likely a title
-     */
-    private boolean isTitleShape(XSLFTextShape textShape, XSLFTextParagraph paragraph) {
-        // Check if it's in a title placeholder position
+    private boolean isTitleParagraph(XSLFTextShape textShape, XSLFTextParagraph paragraph) {
         try {
             if (textShape.getPlaceholder() != null) {
-                // Simplified check - if it has a placeholder, it might be important
                 return true;
             }
-        } catch (Exception e) {
-            // Ignore placeholder checking if API is not available
+        } catch (Exception ignored) {
+            // Ignore placeholder resolution failures.
         }
 
-        // Check font size (titles are usually larger)
         if (!paragraph.getTextRuns().isEmpty()) {
-            XSLFTextRun run = paragraph.getTextRuns().get(0);
-            Double fontSize = run.getFontSize();
-            if (fontSize != null && fontSize > 30) { // Larger than 30pt is likely a title
+            XSLFTextRun firstRun = paragraph.getTextRuns().get(0);
+            Double fontSize = firstRun.getFontSize();
+            if (fontSize != null && fontSize > 30) {
                 return true;
             }
         }
 
-        // Check text length (titles are usually shorter)
         String text = paragraph.getText();
-        if (text != null && text.trim().length() < 100 && text.trim().length() > 0) {
-            // Check if it's likely a title based on capitalization
-            String trimmed = text.trim();
-            return Character.isUpperCase(trimmed.charAt(0)) &&
-                   (!trimmed.contains(".") || trimmed.split("\\.").length == 1);
+        if (text == null) {
+            return false;
         }
 
-        return false;
-    }
-
-    /**
-     * Formats metadata keys for display.
-     *
-     * @param key the metadata key
-     * @return formatted key
-     */
-    private String formatMetadataKey(String key) {
-        // Convert camelCase to Title Case
-        return key.replaceAll("([a-z])([A-Z])", "$1 $2")
-                .replaceAll("^([a-z])", String.valueOf(Character.toUpperCase(key.charAt(0))))
-                .toLowerCase();
+        String trimmed = text.trim();
+        return !trimmed.isEmpty()
+                && trimmed.length() < 100
+                && Character.isUpperCase(trimmed.charAt(0))
+                && (!trimmed.contains(".") || trimmed.split("\\.").length == 1);
     }
 }

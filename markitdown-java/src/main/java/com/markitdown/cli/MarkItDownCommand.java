@@ -1,44 +1,44 @@
 package com.markitdown.cli;
 
 import com.markitdown.api.ConversionResult;
-import com.markitdown.api.DocumentConverter;
 import com.markitdown.config.ConversionOptions;
 import com.markitdown.config.ConfigurationManager;
-import com.markitdown.converters.*;
-import com.markitdown.core.ConverterRegistry;
 import com.markitdown.core.MarkItDownEngine;
 import com.markitdown.exceptions.ConversionException;
-import com.markitdown.utils.FileTypeDetector;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
+import picocli.CommandLine.Spec;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 /**
- * @class MarkItDownCommand
- * @brief MarkItDown Java命令行接口类
- * @details 基于Picocli框架实现的命令行工具，提供文档转换功能
- *          支持多种输入格式、丰富的配置选项、批量处理和管道输入
- *          提供详细的帮助信息和错误处理机制
+ * Command-line entry point for the MarkItDown Java application.
+ *
+ * <p>This command wraps the conversion engine behind a Picocli-based CLI. It
+ * supports file conversion, pipe input, configuration and diagnostic commands,
+ * OCR-related options, and sequential or parallel batch processing.</p>
  *
  * @author duan yan
  * @version 2.1.0
@@ -47,8 +47,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Command(
         name = "markitdown",
         mixinStandardHelpOptions = true,
-        version = "markitdown4j 0.0.3",
-        description = "Convert documents to Markdown",
+        version = "markitdown4j 0.0.4",
+        sortOptions = false,
+        synopsisHeading = "%nUsage:%n",
+        descriptionHeading = "%nWhat It Does:%n",
+        parameterListHeading = "%nInputs:%n",
+        optionListHeading = "%nOptions (ordered by common tasks):%n",
+        description = {
+                "Convert documents to Markdown.",
+                "",
+                "Typical flow:",
+                "  1. Choose your input files or pipe content with --mime-type",
+                "  2. Set output, content, and OCR options as needed",
+                "  3. Use config and diagnostic commands to inspect behavior"
+        },
         footerHeading = "Examples:%n",
         footer = {
                 "  markitdown document.pdf                       # Convert a PDF to Markdown",
@@ -57,74 +69,88 @@ import java.util.concurrent.atomic.AtomicInteger;
                 "  markitdown spreadsheet.xlsx --ocr             # Convert an Excel file with OCR",
                 "  markitdown *.pdf                              # Convert all PDFs in the directory",
                 "  markitdown *.pdf --parallel                   # Convert multiple PDFs in parallel",
+                "  markitdown https://example.com/report.pdf -o out/ # Download a URL and convert it",
                 "  cat document.pdf | markitdown                 # Convert from stdin",
                 "  curl -s http://example.com/doc.pdf | markitdown  # Convert a remote document stream"
         }
 )
 public class MarkItDownCommand implements Callable<Integer> {
 
-    // ==================== 输出选项 ====================
+    @Spec
+    CommandSpec spec;
+
+    // ==================== Output options ====================
 
     @Option(
             names = {"-o", "--output"},
+            order = 10,
             description = "Output file or directory (default: stdout for pipe, .md file for file input)"
     )
     private String output;
 
     @Option(
             names = {"--format", "-f"},
+            order = 11,
             description = "Output format: markdown, plain, json (default: markdown)"
     )
     private String outputFormat = "markdown";
 
-    // ==================== 内容包含选项 ====================
+    // ==================== Content options ====================
 
     @Option(
             names = {"--include-images"},
+            order = 20,
             description = "Include images in the output (default: true)"
     )
     private Boolean includeImages = null;
 
     @Option(
             names = {"--no-images"},
+            order = 21,
             description = "Exclude images from the output"
     )
     private boolean noImages;
 
     @Option(
             names = {"--include-tables"},
+            order = 22,
             description = "Include tables in the output (default: true)"
     )
     private Boolean includeTables = null;
 
     @Option(
             names = {"--no-tables"},
+            order = 23,
             description = "Exclude tables from the output"
     )
     private boolean noTables;
 
     @Option(
             names = {"--include-metadata"},
+            order = 24,
             description = "Include metadata in the output (default: true)"
     )
     private Boolean includeMetadata = null;
 
     @Option(
             names = {"--no-metadata"},
+            order = 25,
             description = "Exclude metadata from the output"
     )
     private boolean noMetadata;
 
-    // ==================== OCR 选项 ====================
+    // ==================== OCR options ====================
 
     @Option(
             names = {"--ocr"},
+            order = 30,
             description = "Use OCR for text extraction from images"
     )
     private boolean useOcr;
 
     @Option(
             names = {"--language", "-l"},
+            order = 31,
             description = "Language for OCR (default: auto)",
             defaultValue = "auto"
     )
@@ -132,44 +158,51 @@ public class MarkItDownCommand implements Callable<Integer> {
 
     @Option(
             names = {"--ocr-engine"},
-            description = "OCR engine: tess4j, tesseract-cli, http, paddleocr (default: tess4j)"
+            order = 32,
+            description = "OCR engine: tesseract-cli, http, paddleocr (default: tesseract-cli)"
     )
     private String ocrEngine;
 
     @Option(
             names = {"--ocr-endpoint"},
+            order = 33,
             description = "Remote OCR endpoint"
     )
     private String ocrEndpoint;
 
     @Option(
             names = {"--ocr-api-key"},
+            order = 34,
             description = "Remote OCR API key or token"
     )
     private String ocrApiKey;
 
     @Option(
             names = {"--ocr-model"},
+            order = 35,
             description = "OCR model name for remote providers"
     )
     private String ocrModel;
 
     @Option(
             names = {"--ocr-timeout"},
+            order = 36,
             description = "OCR timeout in milliseconds"
     )
     private int ocrTimeout;
 
     @Option(
             names = {"--ocr-poll-interval"},
+            order = 37,
             description = "OCR polling interval in milliseconds for async providers"
     )
     private int ocrPollInterval;
 
-    // ==================== 格式选项 ====================
+    // ==================== Format options ====================
 
     @Option(
             names = {"--table-format"},
+            order = 40,
             description = "Table format: github, markdown, pipe (default: github)",
             defaultValue = "github"
     )
@@ -177,6 +210,7 @@ public class MarkItDownCommand implements Callable<Integer> {
 
     @Option(
             names = {"--image-format"},
+            order = 41,
             description = "Image format: markdown, html, base64 (default: markdown)",
             defaultValue = "markdown"
     )
@@ -184,64 +218,73 @@ public class MarkItDownCommand implements Callable<Integer> {
 
     @Option(
             names = {"--image-output-dir"},
+            order = 42,
             description = "Directory for extracted images relative to output file (default: assets/)",
             defaultValue = "assets"
     )
     private String imageOutputDir;
 
-    // ==================== 文件选项 ====================
+    // ==================== File options ====================
 
     @Option(
             names = {"--max-file-size"},
+            order = 50,
             description = "Maximum file size in bytes (default: 50MB, use 0 for unlimited)",
             defaultValue = "52428800"
     )
     private long maxFileSize;
 
-    // ==================== PDF 特定选项 ====================
+    // ==================== PDF options ====================
 
     @Option(
             names = {"--pdf-password"},
+            order = 51,
             description = "Password for encrypted PDF files"
     )
     private String pdfPassword;
 
     @Option(
             names = {"--large-file"},
+            order = 52,
             description = "Allow processing of large files (>50MB)"
     )
     private boolean largeFile;
 
     @Option(
             names = {"--temp-dir"},
+            order = 53,
             description = "Temporary directory for file operations"
     )
     private String tempDir;
 
-    // ==================== 输出控制选项 ====================
+    // ==================== Output control options ====================
 
     @Option(
             names = {"--verbose", "-v"},
+            order = 60,
             description = "Enable verbose output"
     )
     private boolean verbose;
 
     @Option(
             names = {"--quiet", "-q"},
+            order = 61,
             description = "Suppress all output except errors"
     )
     private boolean quiet;
 
-    // ==================== 性能选项 ====================
+    // ==================== Performance options ====================
 
     @Option(
             names = {"--parallel", "-p"},
+            order = 70,
             description = "Enable parallel processing for multiple files"
     )
     private boolean parallel;
 
     @Option(
             names = {"--threads"},
+            order = 71,
             description = "Number of threads for parallel processing (default: CPU cores)",
             defaultValue = "0"
     )
@@ -249,140 +292,175 @@ public class MarkItDownCommand implements Callable<Integer> {
 
     @Option(
             names = {"--progress"},
+            order = 72,
             description = "Show progress bar during conversion"
     )
     private boolean showProgress;
 
     @Option(
             names = {"--stats"},
+            order = 73,
             description = "Show performance statistics after conversion"
     )
     private boolean showStats;
 
     @Option(
             names = {"--memory-limit"},
+            order = 74,
             description = "Memory limit in MB for batch processing (default: auto-detect)"
     )
     private int memoryLimit = 0;
 
     @Option(
             names = {"--optimize-memory"},
+            order = 75,
             description = "Enable memory optimization for large file processing"
     )
     private boolean optimizeMemory;
 
     @Option(
             names = {"--examples"},
+            order = 80,
             description = "Show usage examples and exit"
     )
     private boolean showExamples;
 
     @Option(
             names = {"--generate-config"},
+            order = 81,
             description = "Generate default configuration file"
     )
     private boolean generateConfig;
 
     @Option(
             names = {"--config-path"},
+            order = 82,
             description = "Path to configuration file"
     )
     private String configPath;
 
     @Option(
             names = {"--validate-config"},
+            order = 83,
             description = "Validate configuration file"
     )
     private boolean validateConfig;
 
     @Option(
             names = {"--show-config"},
+            order = 84,
             description = "Show current configuration"
     )
     private boolean showConfig;
 
     @Option(
-            names = {"--interactive", "-i"},
-            description = "Enable interactive mode with detailed feedback"
+            names = {"--list-formats"},
+            order = 85,
+            description = "List supported MIME types and converters"
     )
-    private boolean interactive;
+    private boolean listFormats;
 
     @Option(
             names = {"--recursive", "-r"},
+            order = 86,
             description = "Recursively process files in directories"
     )
     private boolean recursive;
 
     @Option(
             names = {"--batch"},
+            order = 87,
             description = "Batch process all supported files in directory"
     )
     private boolean batch;
 
-    // ==================== MIME 类型选项（用于管道输入）====================
+    // ==================== MIME type option for pipe input ====================
 
     @Option(
             names = {"--mime-type", "-m"},
+            order = 12,
             description = "MIME type for pipe input (e.g., application/pdf)"
     )
     private String mimeType;
 
-    // ==================== 输入文件参数 ====================
+    // ==================== Input arguments ====================
 
     @Parameters(
             arity = "0..*",
-            description = "Input files to convert (optional if using pipe input)"
+            description = "Input files or HTTP(S) URLs to convert (optional if using pipe input)"
     )
     private String[] inputFiles;
 
-    // ==================== 运行时状态 ====================
+    // ==================== Runtime state ====================
 
     private MarkItDownEngine engine;
     private PerformanceStats stats;
+    private ConfigurationManager effectiveConfigurationManager;
 
     @Override
     public Integer call() throws Exception {
         Instant startTime = Instant.now();
         stats = new PerformanceStats();
 
-        // 处理配置相关命令
+        List<String> adminCommands = new ArrayList<>();
         if (generateConfig) {
-            return ConfigCommands.generateConfig(configPath);
+            adminCommands.add("--generate-config");
         }
-
         if (validateConfig) {
-            return ConfigCommands.validateConfig(configPath);
+            adminCommands.add("--validate-config");
         }
-
         if (showConfig) {
-            return ConfigCommands.showConfig(configPath);
+            adminCommands.add("--show-config");
         }
-
-        // 内存优化设置
-        if (optimizeMemory) {
-            System.gc(); // 在开始处理前清理内存
+        if (listFormats) {
+            adminCommands.add("--list-formats");
         }
-
-        // 显示使用示例
         if (showExamples) {
-            System.out.println(UserMessageHelper.getUsageExamples());
-            return 0;
+            adminCommands.add("--examples");
         }
 
-        // 交互模式欢迎信息
-        if (interactive && !quiet) {
-            System.out.println("🚀 MarkItDown Java - 文档转换工具");
-            System.out.println("版本: 2.0.0 | 交互模式已启用\n");
+        if (adminCommands.size() > 1) {
+            System.err.println("Error: diagnostic/config commands cannot be combined: " + String.join(", ", adminCommands));
+            System.err.println("Choose exactly one of: --generate-config, --validate-config, --show-config, --list-formats, --examples");
+            return 1;
         }
 
         try {
+            // Handle config and diagnostic commands before conversion work starts.
+            if (generateConfig) {
+                return ConfigCommands.generateConfig(configPath);
+            }
+
+            if (validateConfig) {
+                return ConfigCommands.validateConfig(configPath);
+            }
+
+            if (showConfig) {
+                return ConfigCommands.showConfig(buildEffectiveConfigurationManager());
+            }
+
+            if (listFormats) {
+                return printSupportedFormats();
+            }
+
+            // Show usage examples and exit.
+            if (showExamples) {
+                System.out.println(UserMessageHelper.getUsageExamples());
+                return 0;
+            }
+
+            // Trigger a best-effort garbage collection before heavy processing.
+            if (optimizeMemory) {
+                System.gc(); // Hint the JVM to reclaim memory before conversion starts.
+            }
+
             // Initialize engine
             engine = createEngine();
 
             // Configure options
             ConversionOptions options = createConversionOptions();
 
-            // 内存监控
+            // Sample current memory pressure for warnings and diagnostics.
             Runtime runtime = Runtime.getRuntime();
             long maxMemory = runtime.maxMemory();
             long usedMemory = runtime.totalMemory() - runtime.freeMemory();
@@ -420,22 +498,23 @@ public class MarkItDownCommand implements Callable<Integer> {
             return result;
 
         } catch (Exception e) {
-            // 处理所有异常，提供用户友好的错误消息
+            // Print a user-facing error first, then expose details in verbose mode.
             if (!quiet) {
                 String errorMessage = UserMessageHelper.getUserFriendlyError(e);
                 System.err.println(errorMessage);
             }
 
-            if (verbose) {
-                System.err.println("\n🔍 详细错误信息:");
+            boolean userInputError = e instanceof ConversionException || e instanceof IllegalArgumentException;
+            if (verbose && !userInputError) {
+                System.err.println("\nDetailed error information:");
                 e.printStackTrace();
             }
 
-            // 返回适当的退出代码
-            if (e instanceof ConversionException) {
-                return 1; // 转换错误
+            // Use distinct exit codes for conversion failures versus unexpected errors.
+            if (userInputError) {
+                return 1; // Conversion failed.
             } else {
-                return 2; // 系统错误
+                return 2; // Unexpected runtime failure.
             }
         } finally {
             if (engine != null) {
@@ -445,7 +524,7 @@ public class MarkItDownCommand implements Callable<Integer> {
     }
 
     /**
-     * 检测是否是管道输入
+     * Detects whether content is being piped into stdin.
      */
     private boolean isPipeInput() {
         try {
@@ -456,44 +535,33 @@ public class MarkItDownCommand implements Callable<Integer> {
     }
 
     /**
-     * 处理管道输入
+     * Processes pipe input using an explicit or detected MIME type.
      */
     private int processPipeInput(ConversionOptions options) {
         try {
-            // 如果没有指定 MIME 类型，尝试检测
-            String detectedMimeType = mimeType;
+            PipeInputHelper.ResolvedPipeInput resolvedPipeInput = PipeInputHelper.resolve(System.in, mimeType);
+            String detectedMimeType = resolvedPipeInput.mimeType();
             if (detectedMimeType == null) {
-                // 尝试从输入流检测 MIME 类型（读取前几个字节）
-                PushbackInputStream pbStream = new PushbackInputStream(System.in, 1024);
-                byte[] header = new byte[1024];
-                int bytesRead = pbStream.read(header);
-                if (bytesRead > 0) {
-                    pbStream.unread(header, 0, bytesRead);
-                    detectedMimeType = detectMimeTypeFromHeader(header, bytesRead);
-                }
-
-                if (detectedMimeType == null) {
-                    System.err.println("Error: Cannot detect MIME type from pipe input.");
-                    System.err.println("Please specify --mime-type option.");
-                    return 1;
-                }
-
-                if (!quiet) {
-                    System.err.println("Detected MIME type: " + detectedMimeType);
-                }
+                System.err.println("Error: Cannot detect MIME type from pipe input.");
+                System.err.println("Please specify --mime-type option.");
+                return 1;
             }
 
-            // 检查是否支持该 MIME 类型
+            if (resolvedPipeInput.detected() && !quiet) {
+                System.err.println("Detected MIME type: " + detectedMimeType);
+            }
+
+            // Reject stream input when no converter supports the resolved MIME type.
             if (!engine.isSupported(detectedMimeType)) {
                 System.err.println("Error: Unsupported MIME type: " + detectedMimeType);
                 return 1;
             }
 
-            // 执行转换
-            ConversionResult result = engine.convert(System.in, detectedMimeType, options);
+            // Convert stdin using the resolved MIME type.
+            ConversionResult result = engine.convert(resolvedPipeInput.stream(), detectedMimeType, options);
 
             if (result.isSuccessful()) {
-                // 输出到 stdout
+                // Pipe-mode output is always written to stdout.
                 System.out.println(result.getMarkdown());
 
                 if (verbose) {
@@ -525,219 +593,86 @@ public class MarkItDownCommand implements Callable<Integer> {
         }
     }
 
-    /**
-     * 从文件头检测 MIME 类型
-     */
-    private String detectMimeTypeFromHeader(byte[] header, int length) {
-        String headerStr = new String(header, 0, Math.min(length, 100)).toLowerCase();
-
-        // PDF signature
-        if (headerStr.startsWith("%pdf")) {
-            return "application/pdf";
-        }
-
-        // ZIP-based formats (DOCX, XLSX, PPTX, EPUB)
-        if (length >= 4 && header[0] == 0x50 && header[1] == 0x4B) {
-            // 需要进一步分析，默认返回 docx
-            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-        }
-
-        // HTML signatures
-        if (headerStr.contains("<!doctype") || headerStr.contains("<html")) {
-            return "text/html";
-        }
-
-        // XML signatures
-        if (headerStr.trim().startsWith("<?xml")) {
-            return "application/xml";
-        }
-
-        // JSON signatures
-        String trimmed = headerStr.trim();
-        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-            return "application/json";
-        }
-
-        // Image signatures
-        if (length >= 8 && header[0] == (byte)0x89 && header[1] == 0x50 &&
-            header[2] == 0x4E && header[3] == 0x47) {
-            return "image/png";
-        }
-        if (length >= 2 && header[0] == (byte)0xFF && header[1] == (byte)0xD8) {
-            return "image/jpeg";
-        }
-        if (length >= 6 && header[0] == 'G' && header[1] == 'I' && header[2] == 'F') {
-            return "image/gif";
-        }
-
-        // Default to plain text
-        if (isTextContent(header, length)) {
-            return "text/plain";
-        }
-
-        return null;
-    }
-
-    /**
-     * 检测是否是文本内容
-     */
-    private boolean isTextContent(byte[] bytes, int length) {
-        for (int i = 0; i < length; i++) {
-            byte b = bytes[i];
-            if (b < 0x20 && b != '\t' && b != '\n' && b != '\r') {
-                return false;
+    private List<String> collectInputFiles() {
+        Consumer<String> warningSink = message -> {
+            if (!quiet) {
+                System.err.println(message);
             }
-        }
-        return true;
+        };
+        Consumer<String> infoSink = message -> {
+            if (!quiet) {
+                System.err.println(message);
+            }
+        };
+        Consumer<String> errorSink = message -> {
+            if (!quiet) {
+                System.err.println(message);
+            }
+        };
+
+        return InputDiscoveryHelper.collectInputFiles(
+                inputFiles,
+                recursive,
+                batch,
+                engine::isSupported,
+                warningSink,
+                infoSink,
+                errorSink
+        );
     }
 
     /**
-     * 顺序处理文件
+     * Processes files sequentially.
      */
     private int processFilesSequential(ConversionOptions options) {
-        int successCount = 0;
-        int errorCount = 0;
-
-        // First collect all files to process (including directories if recursive/batch)
-        List<String> allFiles = new ArrayList<>();
-        for (String inputFile : inputFiles) {
-            if (inputFile.contains("*") || inputFile.contains("?")) {
-                allFiles.addAll(expandWildcard(inputFile));
-            } else {
-                Path path = Paths.get(inputFile);
-                if (Files.isDirectory(path)) {
-                    if (recursive || batch) {
-                        allFiles.addAll(collectFilesFromDirectory(path, recursive));
-                    } else {
-                        if (!quiet) {
-                            System.err.println("Warning: " + inputFile + " is a directory. Use --recursive or --batch to process directories.");
-                        }
-                    }
-                } else {
-                    allFiles.add(inputFile);
-                }
-            }
-        }
+        List<String> allFiles = collectInputFiles();
 
         if (allFiles.isEmpty()) {
             System.err.println("No files to process.");
             return 1;
         }
 
-        // Process collected files
-        for (int i = 0; i < allFiles.size(); i++) {
-            String inputFile = allFiles.get(i);
-
-            if (showProgress) {
-                showProgress(i + 1, allFiles.size(), inputFile);
-            }
-
-            try {
-                processFile(inputFile, options);
-                successCount++;
-                stats.recordSuccess(inputFile);
-            } catch (Exception e) {
-                errorCount++;
-                stats.recordError(inputFile);
-                if (!quiet) {
-                    System.err.println("Error processing " + inputFile + ": " + e.getMessage());
-                }
-                if (verbose) {
-                    e.printStackTrace();
-                }
-            }
-        }
+        BatchConversionRunner.BatchResult result = BatchConversionRunner.runSequential(
+                allFiles,
+                showProgress ? this::showProgress : BatchConversionRunner.ProgressListener.NO_OP,
+                inputFile -> processFile(inputFile, options),
+                stats::recordSuccess,
+                this::handleProcessingError
+        );
 
         if (showProgress) {
-            System.err.println(); // 换行
+            System.err.println(); // Finish the progress line cleanly.
         }
 
         if (!quiet && allFiles.size() > 1) {
-            System.err.printf("Conversion completed: %d successful, %d failed%n", successCount, errorCount);
+            System.err.printf("Conversion completed: %d successful, %d failed%n",
+                    result.successCount(), result.errorCount());
         }
 
-        return errorCount > 0 ? 1 : 0;
+        return result.errorCount() > 0 ? 1 : 0;
     }
 
     /**
-     * 并行处理文件
+     * Processes files in parallel.
      */
     private int processFilesParallel(ConversionOptions options) {
-        List<String> allFiles = new ArrayList<>();
+        List<String> allFiles = collectInputFiles();
 
-        // 收集所有文件（包括目录处理）
-        for (String inputFile : inputFiles) {
-            if (inputFile.contains("*") || inputFile.contains("?")) {
-                allFiles.addAll(expandWildcard(inputFile));
-            } else {
-                Path path = Paths.get(inputFile);
-                if (Files.isDirectory(path)) {
-                    if (recursive || batch) {
-                        allFiles.addAll(collectFilesFromDirectory(path, recursive));
-                    } else {
-                        if (!quiet) {
-                            System.err.println("Warning: " + inputFile + " is a directory. Use --recursive or --batch to process directories.");
-                        }
-                    }
-                } else {
-                    allFiles.add(inputFile);
-                }
-            }
-        }
-
+        // Bail out early when wildcard or directory expansion produced no files.
         if (allFiles.isEmpty()) {
             System.err.println("No files to process.");
             return 1;
         }
 
-        // 确定线程池大小
         int poolSize = threads > 0 ? threads : Runtime.getRuntime().availableProcessors();
-        ExecutorService executor = Executors.newFixedThreadPool(poolSize);
-
-        AtomicInteger successCount = new AtomicInteger(0);
-        AtomicInteger errorCount = new AtomicInteger(0);
-        AtomicInteger processed = new AtomicInteger(0);
-
-        try {
-            // 使用自定义线程池进行并行处理
-            List<CompletableFuture<Void>> futures = allFiles.stream()
-                    .map(inputFile -> CompletableFuture.runAsync(() -> {
-                        try {
-                            if (showProgress) {
-                                int current = processed.incrementAndGet();
-                                showProgress(current, allFiles.size(), inputFile);
-                            }
-
-                            processFile(inputFile, options);
-                            successCount.incrementAndGet();
-                            stats.recordSuccess(inputFile);
-                        } catch (Exception e) {
-                            errorCount.incrementAndGet();
-                            stats.recordError(inputFile);
-                            if (!quiet) {
-                                System.err.println("Error processing " + inputFile + ": " + e.getMessage());
-                            }
-                            if (verbose) {
-                                e.printStackTrace();
-                            }
-                        }
-                    }, executor))
-                    .collect(java.util.stream.Collectors.toList());
-
-            // 等待所有任务完成
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()])).join();
-
-        } finally {
-            executor.shutdown();
-            try {
-                if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
-                    executor.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                executor.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
+        BatchConversionRunner.BatchResult result = BatchConversionRunner.runParallel(
+                allFiles,
+                poolSize,
+                showProgress ? this::showProgress : BatchConversionRunner.ProgressListener.NO_OP,
+                inputFile -> processFile(inputFile, options),
+                stats::recordSuccess,
+                this::handleProcessingError
+        );
 
         if (showProgress) {
             System.err.println();
@@ -745,14 +680,24 @@ public class MarkItDownCommand implements Callable<Integer> {
 
         if (!quiet) {
             System.err.printf("Parallel conversion completed: %d successful, %d failed%n",
-                    successCount.get(), errorCount.get());
+                    result.successCount(), result.errorCount());
         }
 
-        return errorCount.get() > 0 ? 1 : 0;
+        return result.errorCount() > 0 ? 1 : 0;
+    }
+
+    private void handleProcessingError(String inputFile, Exception e) {
+        stats.recordError(inputFile);
+        if (!quiet) {
+            System.err.println("Error processing " + inputFile + ": " + e.getMessage());
+        }
+        if (verbose) {
+            e.printStackTrace();
+        }
     }
 
     /**
-     * 显示进度条
+     * Renders a simple progress bar to stderr.
      */
     private void showProgress(int current, int total, String fileName) {
         int percent = (int) ((current * 100) / total);
@@ -772,7 +717,7 @@ public class MarkItDownCommand implements Callable<Integer> {
         }
         bar.append("]");
 
-        // 截断文件名
+        // Truncate long paths so the progress display stays readable.
         String displayName = fileName;
         if (displayName.length() > 30) {
             displayName = "..." + displayName.substring(displayName.length() - 27);
@@ -783,126 +728,254 @@ public class MarkItDownCommand implements Callable<Integer> {
     }
 
     /**
-     * 展开通配符为文件列表
-     */
-    private List<String> expandWildcard(String pattern) {
-        List<String> files = new ArrayList<>();
-        try {
-            Path parentPath = Paths.get(pattern).getParent();
-            if (parentPath == null) {
-                parentPath = Paths.get(".");
-            }
-
-            String fileName = Paths.get(pattern).getFileName().toString();
-            String globPattern = fileName.replace("*", ".*").replace("?", ".");
-
-            Files.list(parentPath)
-                    .filter(path -> path.getFileName().toString().matches(globPattern))
-                    .filter(path -> path.toFile().isFile())
-                    .filter(engine::isSupported)
-                    .forEach(path -> files.add(path.toString()));
-        } catch (IOException e) {
-            if (!quiet) {
-                System.err.println("Error expanding wildcard: " + e.getMessage());
-            }
-        }
-        return files;
-    }
-
-    /**
      * Creates and configures the MarkItDown engine.
      */
     private MarkItDownEngine createEngine() {
         return new MarkItDownEngine(MarkItDownEngine.createDefaultRegistry());
     }
 
-    /**
-     * Creates conversion options from command-line arguments and configuration file.
-     */
+    private int printSupportedFormats() {
+        MarkItDownEngine formatsEngine = createEngine();
+        try {
+            Map<String, String> converterInfo = new TreeMap<>(formatsEngine.getConverterInfo());
+            List<FormatRow> rows = Arrays.asList(
+                    new FormatRow("PDF", ".pdf", "application/pdf", "PdfConverter"),
+                    new FormatRow("Word (DOCX)", ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "DocxConverter"),
+                    new FormatRow("Word (DOC)", ".doc", "application/msword", "DocConverter"),
+                    new FormatRow("PowerPoint (PPTX)", ".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "PptxConverter"),
+                    new FormatRow("PowerPoint (PPT)", ".ppt", "application/vnd.ms-powerpoint", "PptConverter"),
+                    new FormatRow("Excel (XLSX)", ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "XlsxConverter"),
+                    new FormatRow("Excel (XLS)", ".xls", "application/vnd.ms-excel", "XlsConverter"),
+                    new FormatRow("HTML", ".html, .htm", "text/html", "HtmlConverter"),
+                    new FormatRow("Text / Markdown", ".txt, .md, .markdown", "text/plain, text/markdown", "TextConverter"),
+                    new FormatRow("Structured Text", ".csv, .json, .xml", "text/csv, application/json, application/xml", "TextConverter"),
+                    new FormatRow("Images", ".png, .jpg, .jpeg, .gif, .bmp, .tif, .tiff, .webp", "image/*", "ImageConverter"),
+                    new FormatRow("Audio", ".mp3, .wav, .ogg, .flac, .m4a, .aac, .wma, .opus, .aiff, .au", "audio/*", "AudioConverter"),
+                    new FormatRow("ZIP Archive", ".zip", "application/zip", "ZipConverter")
+            );
+
+            System.out.println("Supported formats:");
+            for (FormatRow row : rows) {
+                String converterInfoLine = converterInfo.containsKey(row.converterName())
+                        ? row.converterName()
+                        : row.converterName() + " (not currently registered)";
+                System.out.printf("- %s%n", row.label());
+                System.out.printf("  Extensions: %s%n", row.extensions());
+                System.out.printf("  MIME: %s%n", row.mimeTypes());
+                System.out.printf("  Converter: %s%n", converterInfoLine);
+            }
+
+            return 0;
+        } finally {
+            formatsEngine.shutdown();
+        }
+    }
+
+    private static final class FormatRow {
+        private final String label;
+        private final String extensions;
+        private final String mimeTypes;
+        private final String converterName;
+
+        private FormatRow(String label, String extensions, String mimeTypes, String converterName) {
+            this.label = label;
+            this.extensions = extensions;
+            this.mimeTypes = mimeTypes;
+            this.converterName = converterName;
+        }
+
+        private String label() {
+            return label;
+        }
+
+        private String extensions() {
+            return extensions;
+        }
+
+        private String mimeTypes() {
+            return mimeTypes;
+        }
+
+        private String converterName() {
+            return converterName;
+        }
+    }
     private ConversionOptions createConversionOptions() {
-        ConversionOptions.Builder builder = ConversionOptions.builder();
+        ConfigurationManager configManager = buildEffectiveConfigurationManager();
+        ConfigurationManager.EffectiveConfiguration effectiveConfig = configManager.getEffectiveConfiguration();
+        ConversionOptions.Builder builder = effectiveConfig.toConversionOptions().toBuilder();
 
-        // Load configuration from file if available
-        ConfigurationManager configManager = new ConfigurationManager();
-
-        // Process boolean options with precedence: CLI args > config file > defaults
-        boolean incImages = this.includeImages != null ? this.includeImages :
-            (configManager.getBooleanProperty("content.include.images", !noImages));
-        boolean incTables = this.includeTables != null ? this.includeTables :
-            (configManager.getBooleanProperty("content.include.tables", !noTables));
-        boolean incMetadata = this.includeMetadata != null ? this.includeMetadata :
-            (configManager.getBooleanProperty("content.include.metadata", !noMetadata));
-
-        // OCR options with precedence
-        boolean useOcrConfig = this.useOcr || configManager.getBooleanProperty("ocr.enable", false);
-        String languageConfig = this.language != null ? this.language :
-            configManager.getProperty("ocr.language", "auto");
-        String ocrEngineConfig = this.ocrEngine != null ? this.ocrEngine :
-            configManager.getOcrEngine();
-        String ocrEndpointConfig = this.ocrEndpoint != null ? this.ocrEndpoint :
-            configManager.getOcrEndpoint();
-        String ocrApiKeyConfig = this.ocrApiKey != null ? this.ocrApiKey :
-            configManager.getOcrApiKey();
-        String ocrModelConfig = this.ocrModel != null ? this.ocrModel :
-            configManager.getOcrModel();
-        int ocrTimeoutConfig = this.ocrTimeout > 0 ? this.ocrTimeout :
-            configManager.getOcrTimeout();
-        int ocrPollIntervalConfig = this.ocrPollInterval > 0 ? this.ocrPollInterval :
-            configManager.getOcrPollInterval();
-
-        // Format options with precedence
-        String tableFormatConfig = this.tableFormat != null ? this.tableFormat :
-            configManager.getProperty("format.table", "github");
-        String imageFormatConfig = this.imageFormat != null ? this.imageFormat :
-            configManager.getProperty("format.image", "markdown");
-
-        // 处理大文件选项
-        long effectiveMaxFileSize = maxFileSize;
-        if (largeFile) {
-            effectiveMaxFileSize = 0; // 0 表示无限制
-        } else if (effectiveMaxFileSize == 0) {
-            // Use config file value if not set via CLI
-            effectiveMaxFileSize = configManager.getLongProperty("performance.max.file.size", 52428800);
-        }
-
-        // Image output directory with precedence
-        String imageOutputDirConfig = this.imageOutputDir != null ? this.imageOutputDir :
-            configManager.getProperty("output.image.dir", "assets");
-
-        // Temp directory with precedence
-        String tempDirConfig = this.tempDir != null ? this.tempDir :
-            configManager.getProperty("output.temp.dir", System.getProperty("java.io.tmpdir"));
-
-        builder.includeImages(incImages)
-               .includeTables(incTables)
-               .includeMetadata(incMetadata)
-               .useOcr(useOcrConfig)
-               .language(languageConfig)
-               .ocrEngine(ocrEngineConfig)
-               .ocrEndpoint(ocrEndpointConfig)
-               .ocrApiKey(ocrApiKeyConfig)
-               .ocrModel(ocrModelConfig)
-               .ocrTimeout(ocrTimeoutConfig)
-               .ocrPollInterval(ocrPollIntervalConfig)
-               .tableFormat(tableFormatConfig)
-               .imageFormat(imageFormatConfig)
-               .imageOutputDir(imageOutputDirConfig)
-               .maxFileSize(effectiveMaxFileSize);
-
-        if (tempDirConfig != null) {
-            builder.tempDirectory(Paths.get(tempDirConfig));
-        }
-
-        // 添加PDF密码到自定义选项
         if (pdfPassword != null && !pdfPassword.isEmpty()) {
-            builder.customOption("pdfPassword", pdfPassword);
+            builder.pdfPassword(pdfPassword);
         }
-
-        // 添加Tesseract路径配置到自定义选项
-        builder.customOption("tesseractPath", configManager.getTesseractPath());
-        builder.customOption("tessdataPath", configManager.getTessdataPath());
 
         return builder.build();
+    }
+
+    private ConfigurationManager createConfigurationManager() {
+        if (configPath != null && !configPath.trim().isEmpty()) {
+            Path explicitConfigPath = Paths.get(configPath);
+            validateExplicitConfigPath(explicitConfigPath);
+            return new ConfigurationManager(Paths.get(System.getProperty("user.dir")), explicitConfigPath);
+        }
+        return new ConfigurationManager();
+    }
+
+    private ConfigurationManager buildEffectiveConfigurationManager() {
+        if (effectiveConfigurationManager == null) {
+            ConfigurationManager configManager = createConfigurationManager();
+            CliConfigurationOverrides.apply(configManager, buildCliOverrideInputs());
+            effectiveConfigurationManager = configManager;
+        }
+        return effectiveConfigurationManager;
+    }
+
+    private CliConfigurationOverrides.Inputs buildCliOverrideInputs() {
+        return CliConfigurationOverrides.Inputs.builder()
+                .includeImages(includeImages)
+                .noImages(noImages)
+                .includeTables(includeTables)
+                .noTables(noTables)
+                .includeMetadata(includeMetadata)
+                .noMetadata(noMetadata)
+                .useOcr(useOcr)
+                .languageSpecified(wasOptionSpecified("--language", "-l"))
+                .language(language)
+                .ocrEngineSpecified(wasOptionSpecified("--ocr-engine"))
+                .ocrEngine(ocrEngine)
+                .ocrEndpointSpecified(wasOptionSpecified("--ocr-endpoint"))
+                .ocrEndpoint(ocrEndpoint)
+                .ocrApiKeySpecified(wasOptionSpecified("--ocr-api-key"))
+                .ocrApiKey(ocrApiKey)
+                .ocrModelSpecified(wasOptionSpecified("--ocr-model"))
+                .ocrModel(ocrModel)
+                .ocrTimeoutSpecified(wasOptionSpecified("--ocr-timeout"))
+                .ocrTimeout(ocrTimeout)
+                .ocrPollIntervalSpecified(wasOptionSpecified("--ocr-poll-interval"))
+                .ocrPollInterval(ocrPollInterval)
+                .tableFormatSpecified(wasOptionSpecified("--table-format"))
+                .tableFormat(tableFormat)
+                .imageFormatSpecified(wasOptionSpecified("--image-format"))
+                .imageFormat(imageFormat)
+                .imageOutputDirSpecified(wasOptionSpecified("--image-output-dir"))
+                .imageOutputDir(imageOutputDir)
+                .tempDirSpecified(wasOptionSpecified("--temp-dir"))
+                .tempDir(tempDir)
+                .maxFileSizeSpecified(wasOptionSpecified("--max-file-size"))
+                .maxFileSize(maxFileSize)
+                .largeFile(largeFile)
+                .parallel(parallel)
+                .threadsSpecified(wasOptionSpecified("--threads"))
+                .threads(threads)
+                .showProgress(showProgress)
+                .showStats(showStats)
+                .optimizeMemory(optimizeMemory)
+                .verbose(verbose)
+                .quiet(quiet)
+                .recursive(recursive)
+                .batch(batch)
+                .build();
+    }
+
+    private void validateExplicitConfigPath(Path explicitConfigPath) {
+        if (!Files.exists(explicitConfigPath)) {
+            throw new IllegalArgumentException("Configuration file does not exist: " + explicitConfigPath);
+        }
+        if (!Files.isRegularFile(explicitConfigPath)) {
+            throw new IllegalArgumentException("Configuration path is not a file: " + explicitConfigPath);
+        }
+    }
+
+    private boolean wasOptionSpecified(String... names) {
+        if (spec == null || spec.commandLine() == null || spec.commandLine().getParseResult() == null) {
+            return false;
+        }
+        for (String name : names) {
+            if (spec.commandLine().getParseResult().hasMatchedOption(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private PreparedInput prepareInput(String inputFile, ConversionOptions options) throws ConversionException {
+        if (!InputDiscoveryHelper.isRemoteUrl(inputFile)) {
+            return PreparedInput.local(inputFile, Paths.get(inputFile));
+        }
+        return downloadRemoteInput(inputFile, options);
+    }
+
+    private PreparedInput downloadRemoteInput(String inputFile, ConversionOptions options) throws ConversionException {
+        HttpURLConnection connection = null;
+        try {
+            URI requestUri = URI.create(inputFile);
+            connection = (HttpURLConnection) requestUri.toURL().openConnection();
+            connection.setRequestMethod("GET");
+            connection.setInstanceFollowRedirects(true);
+            connection.setConnectTimeout(30000);
+            connection.setReadTimeout(60000);
+            connection.setRequestProperty("User-Agent", "markitdown4j/0.0.4");
+
+            int status = connection.getResponseCode();
+            if (status >= 400) {
+                throw new ConversionException("Failed to download URL: HTTP " + status + " for " + inputFile);
+            }
+
+            URI resolvedUri = URI.create(connection.getURL().toString());
+            String remoteFileName = RemoteInputHelper.determineRemoteFileName(
+                    resolvedUri,
+                    connection.getHeaderField("Content-Disposition"),
+                    connection.getContentType()
+            );
+
+            Path tempDirectory = createUrlTempDirectory(options);
+            Path downloadedFile = tempDirectory.resolve(remoteFileName);
+
+            try (InputStream remoteStream = connection.getInputStream()) {
+                Files.copy(remoteStream, downloadedFile, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            return PreparedInput.remote(inputFile, downloadedFile, tempDirectory);
+        } catch (ConversionException e) {
+            throw e;
+        } catch (IOException | IllegalArgumentException e) {
+            throw new ConversionException("Failed to download URL: " + inputFile + " (" + e.getMessage() + ")", e);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    private Path createUrlTempDirectory(ConversionOptions options) throws IOException {
+        Path configuredTempDirectory = options.output().tempDirectory();
+        Path baseDirectory = configuredTempDirectory != null
+                ? configuredTempDirectory
+                : Paths.get(System.getProperty("java.io.tmpdir"));
+        Files.createDirectories(baseDirectory);
+        return Files.createTempDirectory(baseDirectory, "markitdown-url-");
+    }
+
+    private void cleanupPreparedInput(PreparedInput preparedInput) {
+        if (preparedInput == null || preparedInput.cleanupRoot == null) {
+            return;
+        }
+
+        try (java.util.stream.Stream<Path> paths = Files.walk(preparedInput.cleanupRoot)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException e) {
+                    if (verbose) {
+                        System.err.println("Warning: failed to delete temporary file " + path + ": " + e.getMessage());
+                    }
+                }
+            });
+        } catch (IOException e) {
+            if (verbose) {
+                System.err.println("Warning: failed to clean temporary directory " + preparedInput.cleanupRoot + ": " + e.getMessage());
+            }
+        }
     }
 
     /**
@@ -910,124 +983,71 @@ public class MarkItDownCommand implements Callable<Integer> {
      */
     private void processFile(String inputFile, ConversionOptions options) throws ConversionException {
         Instant startTime = Instant.now();
-        Path inputPath = Paths.get(inputFile);
-        File inputFileObj = inputPath.toFile();
+        PreparedInput preparedInput = prepareInput(inputFile, options);
 
-        if (!inputFileObj.exists()) {
-            if (interactive) {
-                System.err.println("❌ 文件不存在: " + inputFile);
-                System.err.println(UserMessageHelper.getFileTypeDetectionInfo(inputFile));
+        try {
+            Path inputPath = preparedInput.inputPath;
+            File inputFileObj = inputPath.toFile();
+
+            if (!inputFileObj.exists()) {
+                throw new ConversionException("Input file does not exist: " + inputFile);
             }
-            throw new ConversionException("Input file does not exist: " + inputFile);
-        }
 
-        if (!inputFileObj.isFile()) {
-            if (interactive) {
-                System.err.println("❌ 不是文件: " + inputFile);
+            if (!inputFileObj.isFile()) {
+                throw new ConversionException("Input path is not a file: " + inputFile);
             }
-            throw new ConversionException("Input path is not a file: " + inputFile);
-        }
 
-        // Check if file type is supported
-        if (!engine.isSupported(inputPath)) {
-            if (interactive) {
-                System.err.println("❌ 不支持的文件类型");
-                System.err.println(UserMessageHelper.getFileTypeDetectionInfo(inputFile));
+            // Check if file type is supported
+            if (!engine.isSupported(inputPath)) {
+                throw new ConversionException("Unsupported file type: " + inputFile);
             }
-            throw new ConversionException("Unsupported file type: " + inputFile);
-        }
 
-        // 交互模式显示处理信息
-        if (interactive && !quiet) {
-            System.out.println("📄 正在处理: " + inputFile);
-            System.out.println("   大小: " + formatFileSize(inputFileObj.length()));
-        }
-
-        // Determine output path for image extraction and file writing
-        Path outputPath;
-        String effectiveOutput = output;
-        if (effectiveOutput == null) {
-            // Check configuration file for default output directory
-            ConfigurationManager configManager = new ConfigurationManager();
-            effectiveOutput = configManager.getOutputDir();
-        }
-
-        if (effectiveOutput != null) {
-            outputPath = determineOutputPath(inputPath, effectiveOutput);
-        } else {
-            // Default to input filename with .md extension in same directory
-            String fileName = inputPath.getFileName().toString();
-            outputPath = inputPath.getParent().resolve(fileName + ".md");
-        }
-
-        // Set output path in options for image extraction
-        ConversionOptions optionsWithPath = new ConversionOptions(options)
-                .setOutputPath(outputPath);
-
-        // Convert the file
-        ConversionResult result = engine.convert(inputPath, optionsWithPath);
-
-        // 交互模式显示成功信息
-        if (interactive && !quiet) {
-            long duration = java.time.Duration.between(startTime, Instant.now()).toMillis();
-            System.out.println("✅ 转换完成 (" + duration + "ms)");
-            if (outputPath != null) {
-                System.out.println("   输出: " + outputPath);
+            // Determine output path for image extraction and file writing
+            Path outputPath;
+            String effectiveOutput = output;
+            if (effectiveOutput == null) {
+                ConfigurationManager.EffectiveConfiguration effectiveConfig =
+                        buildEffectiveConfigurationManager().getEffectiveConfiguration();
+                effectiveOutput = effectiveConfig.output().dir().value();
             }
-        }
 
-        // Determine output destination
-        if (output == null && inputFiles.length == 1) {
-            // Single file, no output specified -> stdout
-            System.out.println(result.getMarkdown());
-        } else {
-            // Multiple files or output specified -> write to file
-            writeResult(result, outputPath);
-
-            if (!quiet && !showProgress) {
-                System.err.printf("Converted: %s -> %s%n", inputFile, outputPath);
+            if (effectiveOutput != null) {
+                outputPath = OutputPathHelper.determineOutputPath(inputPath, effectiveOutput);
+            } else {
+                outputPath = OutputPathHelper.determineDefaultOutputPath(inputPath, preparedInput.remote);
             }
-        }
 
-        // Record stats
-        Duration duration = Duration.between(startTime, Instant.now());
-        stats.recordFileStats(inputFile, inputFileObj.length(), duration.toMillis());
+            ConversionOptions optionsWithPath = new ConversionOptions(options)
+                    .setOutputPath(outputPath);
 
-        if (verbose && result.hasWarnings()) {
-            System.err.println("Warnings for " + inputFile + ":");
-            for (String warning : result.getWarnings()) {
-                System.err.println("  - " + warning);
-            }
-        }
-    }
+            ConversionResult result = engine.convert(inputPath, optionsWithPath);
 
-    /**
-     * Processes wildcard patterns.
-     */
-    private int[] processWildcard(String pattern, ConversionOptions options) {
-        int successCount = 0;
-        int errorCount = 0;
+            if (output == null && inputFiles.length == 1) {
+                System.out.println(result.getMarkdown());
+            } else {
+                OutputPathHelper.writeResult(result, outputPath);
 
-        List<String> files = expandWildcard(pattern);
-        for (String file : files) {
-            try {
-                processFile(file, options);
-                successCount++;
-                stats.recordSuccess(file);
-            } catch (ConversionException e) {
-                errorCount++;
-                stats.recordError(file);
-                if (!quiet) {
-                    System.err.println("Error processing " + file + ": " + e.getMessage());
+                if (!quiet && !showProgress) {
+                    System.err.printf("Converted: %s -> %s%n", inputFile, outputPath);
                 }
             }
-        }
 
-        return new int[]{successCount, errorCount};
+            Duration duration = Duration.between(startTime, Instant.now());
+            stats.recordFileStats(inputFile, inputFileObj.length(), duration.toMillis());
+
+            if (verbose && result.hasWarnings()) {
+                System.err.println("Warnings for " + inputFile + ":");
+                for (String warning : result.getWarnings()) {
+                    System.err.println("  - " + warning);
+                }
+            }
+        } finally {
+            cleanupPreparedInput(preparedInput);
+        }
     }
 
     /**
-     * 格式化文件大小显示
+     * Formats a file size for user-facing output.
      */
     private String formatFileSize(long bytes) {
         if (bytes < 1024) {
@@ -1041,97 +1061,33 @@ public class MarkItDownCommand implements Callable<Integer> {
         }
     }
 
-    /**
-     * Determines the output path based on input path and options.
-     */
-    private Path determineOutputPath(Path inputPath, String outputPathStr) {
-        Path outputPath = Paths.get(outputPathStr);
-
-        // If output is a directory, use input filename with .md extension
-        if (Files.isDirectory(outputPath) || outputPathStr.endsWith("/") || outputPathStr.endsWith("\\")) {
-            String fileName = inputPath.getFileName().toString();
-            return outputPath.resolve(fileName + ".md");
-        }
-
-        return outputPath;
-    }
-
-    /**
-     * Writes the conversion result to the output file.
-     */
-    private void writeResult(ConversionResult result, Path outputPath) throws ConversionException {
-        try {
-            // Create parent directories if they don't exist
-            Path parentPath = outputPath.getParent();
-            if (parentPath != null) {
-                Files.createDirectories(parentPath);
-            }
-
-            // Write the markdown content
-            try (BufferedWriter writer = Files.newBufferedWriter(outputPath)) {
-                writer.write(result.getMarkdown());
-            }
-
-        } catch (IOException e) {
-            throw new ConversionException("Failed to write output file: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Gets the file name without extension.
-     */
-    private String getFileNameWithoutExtension(String fileName) {
-        if (fileName == null) {
-            return "";
-        }
-
-        int lastDotIndex = fileName.lastIndexOf('.');
-        if (lastDotIndex > 0) {
-            return fileName.substring(0, lastDotIndex);
-        }
-
-        return fileName;
-    }
-
-    /**
-     * 从目录收集所有支持的文件
-     * @param directory 要扫描的目录
-     * @param recursive 是否递归扫描子目录
-     * @return 支持的文件路径列表
-     */
-    private List<String> collectFilesFromDirectory(Path directory, boolean recursive) {
-        List<String> files = new ArrayList<>();
-        try {
-            if (recursive) {
-                // 递归遍历目录
-                Files.walk(directory)
-                    .filter(Files::isRegularFile)
-                    .filter(engine::isSupported)
-                    .forEach(path -> files.add(path.toString()));
-            } else {
-                // 只处理当前目录
-                Files.list(directory)
-                    .filter(Files::isRegularFile)
-                    .filter(engine::isSupported)
-                    .forEach(path -> files.add(path.toString()));
-            }
-
-            if (!quiet && !files.isEmpty()) {
-                System.err.printf("Found %d supported file(s) in %s%n", files.size(), directory);
-            }
-        } catch (IOException e) {
-            System.err.println("Error scanning directory " + directory + ": " + e.getMessage());
-        }
-        return files;
-    }
-
     public static void main(String[] args) {
         int exitCode = new CommandLine(new MarkItDownCommand()).execute(args);
         System.exit(exitCode);
     }
 
+    private static final class PreparedInput {
+        private final Path inputPath;
+        private final Path cleanupRoot;
+        private final boolean remote;
+
+        private PreparedInput(Path inputPath, Path cleanupRoot, boolean remote) {
+            this.inputPath = inputPath;
+            this.cleanupRoot = cleanupRoot;
+            this.remote = remote;
+        }
+
+        private static PreparedInput local(String originalInput, Path inputPath) {
+            return new PreparedInput(inputPath, null, false);
+        }
+
+        private static PreparedInput remote(String originalInput, Path inputPath, Path cleanupRoot) {
+            return new PreparedInput(inputPath, cleanupRoot, true);
+        }
+    }
+
     /**
-     * 性能统计内部类
+     * Tracks per-file and aggregate conversion statistics.
      */
     private static class PerformanceStats {
         private final List<FileStats> fileStats = new java.util.concurrent.CopyOnWriteArrayList<>();
@@ -1152,11 +1108,11 @@ public class MarkItDownCommand implements Callable<Integer> {
 
         void printSummary(Duration totalDuration) {
             System.err.println();
-            System.err.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            System.err.println("  性能统计");
-            System.err.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            System.err.printf("  %-25s %-12s %-10s %-12s%n", "文件", "大小", "时间", "速度");
-            System.err.println("  ──────────────────────────────────────────────────────────────");
+            System.err.println("==============================================================");
+            System.err.println("  Performance Summary");
+            System.err.println("==============================================================");
+            System.err.printf("  %-25s %-12s %-10s %-12s%n", "File", "Size", "Time", "Speed");
+            System.err.println("  ------------------------------------------------------------");
 
             long totalSize = 0;
             long totalTime = 0;
@@ -1173,12 +1129,12 @@ public class MarkItDownCommand implements Callable<Integer> {
                 totalTime += fs.durationMs;
             }
 
-            System.err.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            System.err.printf("  总计: %d 文件, %s, %.2fs%n",
+            System.err.println("==============================================================");
+            System.err.printf("  Total: %d file(s), %s, %.2fs%n",
                     fileStats.size(), formatSize(totalSize), totalDuration.toMillis() / 1000.0);
-            System.err.printf("  成功: %d, 失败: %d%n", successCount.get(), errorCount.get());
+            System.err.printf("  Successful: %d, Failed: %d%n", successCount.get(), errorCount.get());
             if (totalTime > 0) {
-                System.err.printf("  平均速度: %s/s%n", formatSize(totalSize * 1000 / totalTime));
+                System.err.printf("  Average speed: %s/s%n", formatSize(totalSize * 1000 / totalTime));
             }
             System.err.println();
         }

@@ -10,20 +10,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * @author duan yan
- * @version 2.0.0
- * @class MarkdownBuilder
- * @brief Markdown文档构建器，用于Converter集成
- * @details 提供流畅API创建结构化markdown内容，支持所有常用元素
- * 包括标题、段落、列表、表格、代码块、链接、图片等
- * @since 2.0.0
+ * Stateful Markdown rendering helper used by converters and the core engine.
  */
 public class MarkdownBuilder {
 
     private final StringBuilder content;
     private final RenderContext context;
 
-    //构造函数
     public MarkdownBuilder() {
         this(MarkdownConfig.builder().build());
     }
@@ -47,7 +40,6 @@ public class MarkdownBuilder {
         this.context = new RenderContext(config);
         this.content = new StringBuilder();
     }
-    // markdownd语法拼接
     public MarkdownBuilder append(String text) {
         content.append(text);
         return this;
@@ -57,7 +49,6 @@ public class MarkdownBuilder {
         content.append(text);
         return this;
     }
-    // 标题模版
     public StringBuilder heading(String text, int level) {
         StringBuilder ans = new StringBuilder();
         if (text == null || text.trim().isEmpty()) {
@@ -68,7 +59,6 @@ public class MarkdownBuilder {
         String headingStyle = context.getHeadingStyle();
 
         if ("setext".equals(headingStyle) && safeLevel <= 2) {
-            // 使用setext风格标题（下划线）
             ans.append(text.trim()).append(System.lineSeparator());
             if (safeLevel == 1) {
                 ans.append("=".repeat(text.trim().length()));
@@ -76,7 +66,6 @@ public class MarkdownBuilder {
                 ans.append("-".repeat(text.trim().length()));
             }
         } else {
-            // 使用ATX风格标题（带#）
             ans.append("#".repeat(safeLevel))
                     .append(" ")
                     .append(text.trim());
@@ -86,7 +75,6 @@ public class MarkdownBuilder {
                 .append(System.lineSeparator());
         return ans;
     }
-    //各类标题
     public StringBuilder h1(String text) {
         return heading(text, 1);
     }
@@ -106,7 +94,6 @@ public class MarkdownBuilder {
         return heading(text, 6);
     }
 
-    // text内部方法
     public StringBuilder paragraph(String text) {
         StringBuilder ans = new StringBuilder();
         if (text != null && !text.trim().isEmpty()) {
@@ -115,13 +102,11 @@ public class MarkdownBuilder {
         return ans;
     }
 
-    //纯文本追加
     public MarkdownBuilder text(String text) {
         content.append(paragraph(text));
         return this;
     }
 
-    // 加粗
     public StringBuilder bold(String text) {
         StringBuilder ans = new StringBuilder();
         if (text != null) {
@@ -130,7 +115,6 @@ public class MarkdownBuilder {
         return ans;
     }
 
-    // 斜体
     public StringBuilder italic(String text) {
         StringBuilder ans = new StringBuilder();
         if (text != null) {
@@ -139,7 +123,6 @@ public class MarkdownBuilder {
         return ans;
     }
 
-    // 内联
     public StringBuilder inlineCode(String text) {
         StringBuilder ans = new StringBuilder();
         if (text != null) {
@@ -148,7 +131,6 @@ public class MarkdownBuilder {
         return ans;
     }
 
-    // 代码块
     public StringBuilder codeBlock(String code, String language) {
         StringBuilder ans = new StringBuilder();
         if (code != null) {
@@ -172,7 +154,6 @@ public class MarkdownBuilder {
         return "- " + s;
     }
 
-    // 带level无序列表
     public StringBuilder unorderedList(int level, StringBuilder... items) {
         StringBuilder ans = new StringBuilder();
         if (items != null) {
@@ -193,7 +174,6 @@ public class MarkdownBuilder {
         return ans;
     }
 
-    // 有序列表
     public StringBuilder orderedList(int level, int startNumber, String[] items) {
         StringBuilder ans = new StringBuilder();
         if (items != null) {
@@ -212,38 +192,24 @@ public class MarkdownBuilder {
         }
         return ans;
     }
-    // 表格
     public StringBuilder table(String[] headers, String[][] rows) {
         StringBuilder ans = new StringBuilder();
         if (!context.shouldIncludeTables() || headers == null || headers.length == 0) {
             return ans;
         }
 
-        // 表格标题行
-        ans.append("| ");
-        for (int i = 0; i < headers.length; i++) {
-            if (i > 0) ans.append(" | ");
-            ans.append(headers[i] != null ? headers[i].trim() : "");
-        }
-        ans.append(" |").append(System.lineSeparator());
+        boolean fencedPipeTable = !"markdown".equalsIgnoreCase(context.getTableFormat());
+        appendTableRow(ans, headers, headers.length, fencedPipeTable);
 
-        // 表格分隔线
-        ans.append("|");
+        String[] separatorRow = new String[headers.length];
         for (int i = 0; i < headers.length; i++) {
-            ans.append("-----|");
+            separatorRow[i] = "-----";
         }
-        ans.append(System.lineSeparator());
+        appendTableRow(ans, separatorRow, separatorRow.length, fencedPipeTable);
 
-        // 表格数据行
         if (rows != null) {
             for (String[] row : rows) {
-                ans.append("| ");
-                for (int i = 0; i < headers.length; i++) {
-                    if (i > 0) ans.append(" | ");
-                    String cell = (row != null && i < row.length) ? row[i] : "";
-                    ans.append(cell != null ? cell.trim() : "");
-                }
-                ans.append(" |").append(System.lineSeparator());
+                appendTableRow(ans, row, headers.length, fencedPipeTable);
             }
         }
 
@@ -251,7 +217,6 @@ public class MarkdownBuilder {
         return ans;
     }
 
-    // 引用块
     public StringBuilder blockquote(String text) {
         StringBuilder ans = new StringBuilder();
         if (text != null) {
@@ -264,14 +229,12 @@ public class MarkdownBuilder {
         return ans;
     }
 
-    // 水平线
     public MarkdownBuilder horizontalRule() {
         content.append("---")
                 .append(System.lineSeparator())
                 .append(System.lineSeparator());
         return this;
     }
-    //链接
     public MarkdownBuilder link(String text, String url) {
         if (text != null && url != null) {
             content.append("[").append(escapeMarkdown(text)).append("](")
@@ -280,7 +243,6 @@ public class MarkdownBuilder {
         return this;
     }
 
-    // 图像
     public MarkdownBuilder image(String altText, String url, String title) {
         if (url != null) {
             content.append("![")
@@ -296,24 +258,20 @@ public class MarkdownBuilder {
         return this;
     }
 
-    // break
     public MarkdownBuilder lineBreak() {
         content.append("  ").append(System.lineSeparator());
         return this;
     }
-    // 换行
     public MarkdownBuilder newline() {
         content.append(System.lineSeparator());
         return this;
     }
-    // 换行
     public MarkdownBuilder newline(int count) {
         for (int i = 0; i < count; i++) {
             content.append(System.lineSeparator());
         }
         return this;
     }
-    // 直接拼接
     public MarkdownBuilder raw(String text) {
         if (text != null) {
             content.append(text);
@@ -325,21 +283,11 @@ public class MarkdownBuilder {
         return content.toString();
     }
 
-    /**
-     * @return MarkdownBuilder 构建器实例
-     * @brief 清空构建器
-     * @details 清空当前构建器内容，但保留上下文中的输出内容
-     */
     public MarkdownBuilder clear() {
         content.setLength(0);
         return this;
     }
 
-    /**
-     * @return String 输出的内容字符串
-     * @brief 输出到上下文并清空构建器
-     * @details 将当前内容输出到渲染上下文并清空构建器，用于内存管理
-     */
     public String flush() {
         String flushedContent = content.toString();
         context.getOutput().append(flushedContent);
@@ -348,32 +296,15 @@ public class MarkdownBuilder {
     }
 
 
-    /**
-     * @return int 内容字符数
-     * @brief 获取当前内容长度
-     */
     public int length() {
         return content.length();
     }
 
-    /**
-     * @return RenderContext 渲染上下文实例
-     * @brief 获取渲染上下文
-     */
     public RenderContext getContext() {
         return context;
     }
 
-    // ==================== 文档结构方法 ====================
 
-    /**
-     * @param title    文档标题
-     * @param metadata 文档元数据
-     * @param content  文档内容
-     * @return MarkdownBuilder 构建器实例
-     * @brief 创建完整文档
-     * @details 创建包含标题、元数据和内容的完整文档结构
-     */
     public MarkdownBuilder document(String title, Map<String, Object> metadata, String content) {
         if (title != null && !title.trim().isEmpty()) {
             heading(title, 1);
@@ -398,7 +329,6 @@ public class MarkdownBuilder {
 
         return this;
     }
-    // 文件元数据转换
     public MarkdownBuilder header(Map<String, Object> metadata) {
 
         this.append(heading(escapeMarkdown(resolveDocumentTitle(metadata)), 1));
@@ -415,12 +345,6 @@ public class MarkdownBuilder {
         return this;
     }
 
-    /**
-     * @param text 需要转义的文本
-     * @return MarkdownBuilder 构建器实例
-     * @brief 添加转义文本
-     * @details 添加经过Markdown特殊字符转义的文本
-     */
     public MarkdownBuilder escaped(String text) {
         if (text != null) {
             raw(escapeMarkdown(text));
@@ -429,29 +353,15 @@ public class MarkdownBuilder {
     }
 
 
-    /**
-     * @return boolean 是否有效
-     * @brief 验证当前内容
-     * @details 验证当前构建器内容是否包含有效的Markdown语法
-     */
     public boolean isValidContent() {
         return isValidMarkdown(build());
     }
 
-    /**
-     * @param markdown 要验证的Markdown字符串
-     * @return boolean 是否有效
-     * @brief 静态验证Markdown语法
-     * @details 验证指定字符串是否包含有效的Markdown语法
-     */
-    // Todo: markdown语法判别有问题，之后修改
     public static boolean isValidMarkdown(String markdown) {
         if (markdown == null) {
             return false;
         }
 
-        // Basic validation checks
-        // Check for balanced brackets and parentheses
         int openBrackets = markdown.length() - markdown.replace("[", "").length();
         int closeBrackets = markdown.length() - markdown.replace("]", "").length();
         if (openBrackets != closeBrackets) {
@@ -464,12 +374,10 @@ public class MarkdownBuilder {
             return false;
         }
 
-        // Check for malformed link syntax
         if (markdown.contains("[](")) {
             return false;
         }
 
-        // Check for empty link text
         if (markdown.matches(".*\\[\\s*\\]\\([^)]*\\).*")) {
             return false;
         }
@@ -477,46 +385,52 @@ public class MarkdownBuilder {
         return true;
     }
 
-    // ==================== 私有辅助方法 ====================
 
-    /**
-     * @param key 元数据键名
-     * @return String 格式化后的键名
-     * @brief 格式化元数据键名
-     * @details 将驼峰命名转换为可读格式
-     */
-    public static String prettifyMetadataKey(String key) {
+        public static String prettifyMetadataKey(String key) {
         if (key == null) {
             return "";
         }
 
         String trimmed = key.trim();
         Map<String, String> aliases = new LinkedHashMap<>();
-        aliases.put("文件名", "File Name");
-        aliases.put("文件大小", "File Size");
-        aliases.put("文件类型", "File Type");
-        aliases.put("转换时刻", "Converted At");
-        aliases.put("宽度", "Width");
-        aliases.put("高度", "Height");
-        aliases.put("格式", "Format");
-        aliases.put("颜色类型", "Color Type");
-        aliases.put("页数", "Pages");
-        aliases.put("标题", "Title");
-        aliases.put("作者", "Author");
-        aliases.put("主题", "Subject");
-        aliases.put("创建工具", "Creator");
-        aliases.put("pdf生成器", "PDF Producer");
-        aliases.put("生产者", "Producer");
-        aliases.put("行数", "Line Count");
-        aliases.put("行数量", "Line Count");
-        aliases.put("字符数量", "Character Count");
-        aliases.put("单词数", "Word Count");
-        aliases.put("单词数量", "Word Count");
-        aliases.put("工作表数量", "Sheet Count");
-        aliases.put("幻灯片数量", "Slide Count");
-        aliases.put("幻灯片宽度", "Slide Width");
-        aliases.put("幻灯片高度", "Slide Height");
-        aliases.put("压缩包条目数", "Archive Entry Count");
+        aliases.put("File Name", "File Name");
+        aliases.put("File Size", "File Size");
+        aliases.put("File Type", "File Type");
+        aliases.put("Converted At", "Converted At");
+        aliases.put("Width", "Width");
+        aliases.put("Height", "Height");
+        aliases.put("Format", "Format");
+        aliases.put("Color Type", "Color Type");
+        aliases.put("Pages", "Pages");
+        aliases.put("Title", "Title");
+        aliases.put("Author", "Author");
+        aliases.put("Subject", "Subject");
+        aliases.put("Creator", "Creator");
+        aliases.put("PDF Producer", "PDF Producer");
+        aliases.put("Producer", "Producer");
+        aliases.put("Line Count", "Line Count");
+        aliases.put("Character Count", "Character Count");
+        aliases.put("Word Count", "Word Count");
+        aliases.put("Sheet Count", "Sheet Count");
+        aliases.put("Slide Count", "Slide Count");
+        aliases.put("Slide Width", "Slide Width");
+        aliases.put("Slide Height", "Slide Height");
+        aliases.put("Archive Entry Count", "Archive Entry Count");
+        aliases.put("Column Count", "Column Count");
+        aliases.put("Data Row Count", "Data Row Count");
+        aliases.put("Has Header", "Has Header");
+        aliases.put("Valid JSON", "Valid JSON");
+        aliases.put("Valid XML", "Valid XML");
+        aliases.put("Root Element", "Root Element");
+        aliases.put("Root Namespace", "Root Namespace");
+        aliases.put("Element Count", "Element Count");
+        aliases.put("Attribute Count", "Attribute Count");
+        aliases.put("Text Node Count", "Text Node Count");
+        aliases.put("Has CDATA", "Has CDATA");
+        aliases.put("Has Comments", "Has Comments");
+        aliases.put("Namespace Count", "Namespace Count");
+        aliases.put("Validation Error", "Validation Error");
+        aliases.put("Processing Error", "Processing Error");
 
         String alias = aliases.get(trimmed);
         if (alias != null) {
@@ -533,18 +447,10 @@ public class MarkdownBuilder {
 
         return Character.toUpperCase(spaced.charAt(0)) + spaced.substring(1);
     }
-
     private String formatMetadataKey(String key) {
         return prettifyMetadataKey(key);
     }
 
-    /**
-     * @param value 元数据值
-     * @return String 格式化后的字符串
-     * @brief 格式化元数据值
-     * @details 将不同类型的对象转换为字符串表示
-     */
-    // Todo: 这里不够严谨
     private String formatMetadataValue(Object value) {
         if (value == null) {
             return "";
@@ -596,7 +502,6 @@ public class MarkdownBuilder {
         return "Document";
     }
 
-    // 列表标记符号
     private String getListMarker(String listType) {
         String style = context.getListStyle();
         if ("unordered".equals(listType)) {
@@ -612,7 +517,26 @@ public class MarkdownBuilder {
         return "-";
     }
 
-    // 转义
+    private void appendTableRow(StringBuilder ans, String[] row, int columnCount, boolean fencedPipeTable) {
+        if (fencedPipeTable) {
+            ans.append("| ");
+        }
+
+        for (int i = 0; i < columnCount; i++) {
+            if (i > 0) {
+                ans.append(" | ");
+            }
+            String cell = (row != null && i < row.length) ? row[i] : "";
+            ans.append(cell != null ? cell.trim() : "");
+        }
+
+        if (fencedPipeTable) {
+            ans.append(" |");
+        }
+
+        ans.append(System.lineSeparator());
+    }
+
     public String escapeMarkdown(String text) {
         if (text == null) {
             return "";
@@ -638,3 +562,4 @@ public class MarkdownBuilder {
     }
 
 }
+

@@ -48,4 +48,60 @@ class TextConverterStreamingTest {
         assertTrue(result.getMarkdown().contains("```json"));
         assertEquals("json", result.getMetadata("File Type"));
     }
+
+    @Test
+    void usesTypedSourceFileNameWhenProvided() throws Exception {
+        ConversionOptions options = ConversionOptions.builder()
+                .includeMetadata(true)
+                .sourceFileName("nested/path/from-zip.txt")
+                .build();
+
+        ConversionResult result = converter.convert(
+                new ByteArrayInputStream("hello stream".getBytes(StandardCharsets.UTF_8)),
+                "text/plain",
+                options
+        );
+
+        assertTrue(result.isSuccessful());
+        assertEquals("nested/path/from-zip.txt", result.getOriginalFileName());
+        assertEquals("nested/path/from-zip.txt", result.getMetadata("File Name"));
+    }
+
+    @Test
+    void omitsCsvTableWhenTablesAreDisabled() throws Exception {
+        ConversionOptions options = ConversionOptions.builder()
+                .includeMetadata(false)
+                .includeTables(false)
+                .build();
+
+        ConversionResult result = converter.convert(
+                new ByteArrayInputStream("name,value\nalpha,1".getBytes(StandardCharsets.UTF_8)),
+                "text/csv",
+                options
+        );
+
+        assertTrue(result.isSuccessful());
+        assertFalse(result.getMarkdown().contains("|"),
+                "CSV table markup should be omitted when includeTables=false");
+    }
+
+    @Test
+    void rendersMarkdownStyleCsvTableWithoutOuterPipes() throws Exception {
+        ConversionOptions options = ConversionOptions.builder()
+                .includeMetadata(false)
+                .includeTables(true)
+                .tableFormat("markdown")
+                .build();
+
+        ConversionResult result = converter.convert(
+                new ByteArrayInputStream("name,value\nalpha,1".getBytes(StandardCharsets.UTF_8)),
+                "text/csv",
+                options
+        );
+
+        assertTrue(result.isSuccessful());
+        assertTrue(result.getMarkdown().contains("name | value"));
+        assertFalse(result.getMarkdown().contains("| name | value |"),
+                "markdown table format should omit outer pipes");
+    }
 }

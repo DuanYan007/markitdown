@@ -4,7 +4,13 @@ import com.markitdown.api.ConversionResult;
 import com.markitdown.api.DocumentConverter;
 import com.markitdown.config.ConversionOptions;
 import com.markitdown.exceptions.ConversionException;
-import org.apache.poi.hslf.usermodel.*;
+import org.apache.poi.hslf.usermodel.HSLFGroupShape;
+import org.apache.poi.hslf.usermodel.HSLFShape;
+import org.apache.poi.hslf.usermodel.HSLFSlide;
+import org.apache.poi.hslf.usermodel.HSLFSlideShow;
+import org.apache.poi.hslf.usermodel.HSLFTextParagraph;
+import org.apache.poi.hslf.usermodel.HSLFTextRun;
+import org.apache.poi.hslf.usermodel.HSLFTextShape;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,13 +19,15 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * @class PptConverter
- * @brief PowerPoint 97-2003 演示文稿转换器
+ * Converts legacy PPT presentations into Markdown.
  */
 public class PptConverter implements DocumentConverter {
 
@@ -32,23 +40,19 @@ public class PptConverter implements DocumentConverter {
 
         logger.info("Converting PPT file: {}", filePath);
 
-        try (FileInputStream fis = new FileInputStream(filePath.toFile());
-             HSLFSlideShow ppt = new HSLFSlideShow(fis)) {
+        try (FileInputStream input = new FileInputStream(filePath.toFile());
+             HSLFSlideShow presentation = new HSLFSlideShow(input)) {
 
-            Map<String, Object> metadata = extractMetadata(ppt, options);
+            Map<String, Object> metadata = extractMetadata(presentation, options, filePath);
+            String markdownContent = convertToMarkdown(presentation, metadata, options);
 
-            if (options.isIncludeMetadata()) {
-                metadata.put("文件名", filePath.getFileName().toString());
-                metadata.put("文件大小", filePath.toFile().length());
-            }
-
-            String markdownContent = convertToMarkdown(ppt, metadata, options);
-
-            List<String> warnings = new ArrayList<>();
-
-            return new ConversionResult(markdownContent, metadata, warnings,
-                    filePath.toFile().length(), filePath.getFileName().toString());
-
+            return new ConversionResult(
+                    markdownContent,
+                    metadata,
+                    new ArrayList<>(),
+                    filePath.toFile().length(),
+                    filePath.getFileName().toString()
+            );
         } catch (IOException e) {
             String errorMessage = "Failed to process PPT file: " + e.getMessage();
             logger.error(errorMessage, e);
@@ -71,86 +75,88 @@ public class PptConverter implements DocumentConverter {
         return "PptConverter";
     }
 
-    private Map<String, Object> extractMetadata(HSLFSlideShow ppt, ConversionOptions options) {
-        Map<String, Object> metadata = new HashMap<>();
-
-        if (options.isIncludeMetadata()) {
-            metadata.put("幻灯片数量", ppt.getSlides().size());
-            metadata.put("转换时刻", LocalDateTime.now());
-
-            Dimension pageSize = ppt.getPageSize();
-            if (pageSize != null) {
-                metadata.put("幻灯片宽度", pageSize.width);
-                metadata.put("幻灯片高度", pageSize.height);
-            }
+    private Map<String, Object> extractMetadata(HSLFSlideShow presentation, ConversionOptions options, Path filePath) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (!options.content().includeMetadata()) {
+            return metadata;
         }
 
+        metadata.put("Slide Count", presentation.getSlides().size());
+        Dimension pageSize = presentation.getPageSize();
+        if (pageSize != null) {
+            metadata.put("Slide Width", pageSize.width);
+            metadata.put("Slide Height", pageSize.height);
+        }
+        metadata.put("File Name", filePath.getFileName().toString());
+        metadata.put("File Size", filePath.toFile().length());
+        metadata.put("Converted At", LocalDateTime.now());
         return metadata;
     }
 
-    private String convertToMarkdown(HSLFSlideShow ppt, Map<String, Object> metadata, ConversionOptions options) {
+    private String convertToMarkdown(HSLFSlideShow presentation, Map<String, Object> metadata, ConversionOptions options) {
         StringBuilder markdown = new StringBuilder();
 
-        if (options.isIncludeMetadata() && !metadata.isEmpty()) {
-            markdown.append("## 演示文稿信息\n\n");
+        if (options.content().includeMetadata() && !metadata.isEmpty()) {
+            markdown.append("## Presentation Information\n\n");
             for (Map.Entry<String, Object> entry : metadata.entrySet()) {
                 if (entry.getValue() != null) {
-                    markdown.append("- **").append(entry.getKey())
-                            .append(":** ").append(entry.getValue()).append("\n");
+                    markdown.append("- **")
+                            .append(entry.getKey())
+                            .append(":** ")
+                            .append(entry.getValue())
+                            .append("\n");
                 }
             }
             markdown.append("\n");
         }
 
-        List<HSLFSlide> slides = ppt.getSlides();
-        for (int i = 0; i < slides.size(); i++) {
-            processSlide(slides.get(i), i + 1, markdown, options);
+        List<HSLFSlide> slides = presentation.getSlides();
+        for (int slideIndex = 0; slideIndex < slides.size(); slideIndex++) {
+            processSlide(slides.get(slideIndex), slideIndex + 1, markdown);
         }
 
         return markdown.toString();
     }
 
-    private void processSlide(HSLFSlide slide, int slideNum, StringBuilder markdown, ConversionOptions options) {
-        markdown.append("## 幻灯片 ").append(slideNum).append("\n\n");
+    private void processSlide(HSLFSlide slide, int slideNumber, StringBuilder markdown) {
+        markdown.append("## Slide ").append(slideNumber).append("\n\n");
 
-        // 处理所有形状
         for (HSLFShape shape : slide.getShapes()) {
             if (shape instanceof HSLFTextShape) {
-                processTextShape((HSLFTextShape) shape, markdown, options);
+                processTextShape((HSLFTextShape) shape, markdown);
             } else if (shape instanceof HSLFGroupShape) {
-                processGroupShape((HSLFGroupShape) shape, markdown, options);
+                processGroupShape((HSLFGroupShape) shape, markdown);
             }
-            // 注意：HSLFTable 在 POI 5.x 中 API 不稳定，暂时跳过表格处理
         }
 
         markdown.append("---\n\n");
     }
 
-    private void processTextShape(HSLFTextShape textShape, StringBuilder markdown, ConversionOptions options) {
+    private void processTextShape(HSLFTextShape textShape, StringBuilder markdown) {
         String text = textShape.getText();
         if (text == null || text.trim().isEmpty()) {
             return;
         }
 
-        // 检测是否为标题（基于字体大小）
-        boolean isTitle = false;
+        boolean titleLike = false;
         for (HSLFTextParagraph paragraph : textShape.getTextParagraphs()) {
             for (HSLFTextRun run : paragraph.getTextRuns()) {
                 Double fontSize = run.getFontSize();
                 if (fontSize != null && fontSize > 30) {
-                    isTitle = true;
+                    titleLike = true;
                     break;
                 }
             }
         }
 
-        if (isTitle) {
+        if (titleLike) {
             markdown.append("### ").append(text.trim()).append("\n\n");
-        } else {
-            String formattedText = processTextRuns(textShape);
-            if (!formattedText.trim().isEmpty()) {
-                markdown.append(formattedText).append("\n\n");
-            }
+            return;
+        }
+
+        String formatted = processTextRuns(textShape);
+        if (!formatted.trim().isEmpty()) {
+            markdown.append(formatted).append("\n\n");
         }
     }
 
@@ -183,12 +189,12 @@ public class PptConverter implements DocumentConverter {
         return formatted.toString();
     }
 
-    private void processGroupShape(HSLFGroupShape groupShape, StringBuilder markdown, ConversionOptions options) {
+    private void processGroupShape(HSLFGroupShape groupShape, StringBuilder markdown) {
         for (HSLFShape shape : groupShape.getShapes()) {
             if (shape instanceof HSLFTextShape) {
-                processTextShape((HSLFTextShape) shape, markdown, options);
+                processTextShape((HSLFTextShape) shape, markdown);
             } else if (shape instanceof HSLFGroupShape) {
-                processGroupShape((HSLFGroupShape) shape, markdown, options);
+                processGroupShape((HSLFGroupShape) shape, markdown);
             }
         }
     }

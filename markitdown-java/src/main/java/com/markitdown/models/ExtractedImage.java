@@ -4,24 +4,23 @@ import java.nio.file.Path;
 import java.util.Objects;
 
 /**
- * @class ExtractedImage
- * @brief 表示从文档中提取的图片信息
+ * Metadata for an image extracted from a source document.
  */
 public class ExtractedImage {
 
-    private final Path imagePath;           // 图片文件路径
-    private final String relativePath;      // 相对于Markdown文件的路径
-    private final String originalFilename;  // 原始文件名
-    private final String format;            // 图片格式 (PNG, JPEG等)
-    private final long size;                // 文件大小
-    private final int index;                // 图片索引
+    private final Path imagePath;
+    private final String relativePath;
+    private final String originalFilename;
+    private final String format;
+    private final long size;
+    private final int index;
 
     public ExtractedImage(Path imagePath, String relativePath, String originalFilename,
-                         String format, long size, int index) {
-        this.imagePath = Objects.requireNonNull(imagePath, "图片路径不能为空");
-        this.relativePath = Objects.requireNonNull(relativePath, "相对路径不能为空");
+                          String format, long size, int index) {
+        this.imagePath = Objects.requireNonNull(imagePath, "Image path cannot be null");
+        this.relativePath = Objects.requireNonNull(relativePath, "Relative path cannot be null");
         this.originalFilename = originalFilename;
-        this.format = Objects.requireNonNull(format, "图片格式不能为空");
+        this.format = Objects.requireNonNull(format, "Image format cannot be null");
         this.size = size;
         this.index = index;
     }
@@ -51,12 +50,13 @@ public class ExtractedImage {
     }
 
     /**
-     * 获取Markdown格式的图片引用
-     * @param altText 替代文本
-     * @return Markdown图片语法
+     * Builds a Markdown image reference for the extracted asset.
+     *
+     * @param altText alt text to use when available
+     * @return Markdown image syntax
      */
     public String toMarkdown(String altText) {
-        String alt = (altText != null && !altText.isEmpty()) ? altText : "图片" + index;
+        String alt = (altText != null && !altText.isEmpty()) ? altText : "Image " + index;
         return "![" + alt + "](" + relativePath + ")";
     }
 

@@ -1,231 +1,326 @@
 package com.markitdown.cli;
 
 import com.markitdown.exceptions.ConversionException;
-import picocli.CommandLine;
 
-import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
- * 用户消息助手类，提供友好的错误消息和解决建议
+ * Human-readable CLI messages for common failures and quick-start examples.
  */
-public class UserMessageHelper {
+public final class UserMessageHelper {
 
-    /**
-     * 获取用户友好的错误消息和解决方案
-     */
-    public static String getUserFriendlyError(Throwable e) {
-        if (e instanceof ConversionException) {
-            return formatConversionError((ConversionException) e);
-        }
-
-        String message = e.getMessage();
-        if (message == null) {
-            message = e.getClass().getSimpleName();
-        }
-
-        // 常见错误模式识别和建议
-        if (message.contains("Cannot decrypt PDF") || message.contains("password")) {
-            return "🔒 PDF文件需要密码\n\n" +
-                   "错误: " + message + "\n\n" +
-                   "💡 解决方案:\n" +
-                   "  • 使用 --pdf-password 选项提供密码\n" +
-                   "  • 示例: markitdown file.pdf --pdf-password yourpassword\n";
-        }
-
-        if (message.contains("exceeds maximum allowed size")) {
-            return "📏 文件过大\n\n" +
-                   "错误: " + message + "\n\n" +
-                   "💡 解决方案:\n" +
-                   "  • 使用 --large-file 选项允许处理大文件\n" +
-                   "  • 示例: markitdown large-file.pdf --large-file\n" +
-                   "  • 或者: markitdown large-file.pdf --optimize-memory\n";
-        }
-
-        if (message.contains("Unsupported file type")) {
-            return "❌ 不支持的文件类型\n\n" +
-                   "错误: " + message + "\n\n" +
-                   "💡 支持的文件类型:\n" +
-                   "  • PDF: .pdf\n" +
-                   "  • Word: .docx, .doc\n" +
-                   "  • Excel: .xlsx, .xls\n" +
-                   "  • PowerPoint: .pptx, .ppt\n" +
-                   "  • HTML: .html, .htm\n" +
-                   "  • 图片: .png, .jpg, .gif, .bmp (需 --ocr)\n" +
-                   "  • 音频: .mp3, .wav, .m4a\n" +
-                   "  • 压缩包: .zip\n" +
-                   "  • 文本: .txt, .md\n";
-        }
-
-        if (message.contains("Tesseract") || message.contains("OCR")) {
-            return "🔍 OCR相关错误\n\n" +
-                   "错误: " + message + "\n\n" +
-                   "💡 解决方案:\n" +
-                   "  • 确保Tesseract OCR已正确安装\n" +
-                   "  • 检查语言包是否安装: --language选项\n" +
-                   "  • 下载地址: https://github.com/tesseract-ocr/tesseract\n" +
-                   "  • 语言包: https://github.com/tesseract-ocr/tessdata\n";
-        }
-
-        if (message.contains("Out of memory") || message.contains("Java heap space")) {
-            return "💾 内存不足\n\n" +
-                   "错误: " + message + "\n\n" +
-                   "💡 解决方案:\n" +
-                   "  • 使用 --optimize-memory 启用内存优化\n" +
-                   "  • 增加JVM内存: java -Xmx2g -jar markitdown.jar\n" +
-                   "  • 处理大文件时使用 --large-file\n";
-        }
-
-        // 默认友好消息
-        return "⚠️ 转换失败\n\n" +
-               "错误: " + message + "\n\n" +
-               "💡 建议:\n" +
-               "  • 使用 --verbose 查看详细错误信息\n" +
-               "  • 检查文件是否损坏或格式是否正确\n" +
-               "  • 尝试使用 --help 查看所有选项\n";
+    private enum CliErrorKind {
+        PDF_PASSWORD,
+        FILE_SIZE,
+        UNSUPPORTED_TYPE,
+        CONFIGURATION,
+        REMOTE_INPUT,
+        OCR_UNAVAILABLE,
+        OCR_EXECUTION,
+        OUT_OF_MEMORY,
+        CONVERSION_GENERIC,
+        GENERAL
     }
 
-    /**
-     * 格式化转换错误
-     */
-    private static String formatConversionError(ConversionException e) {
-        StringBuilder sb = new StringBuilder();
-
-        String fileName = e.getFileName();
-        String converterName = e.getConverterName();
-
-        if (fileName != null) {
-            sb.append("📄 文件: ").append(fileName).append("\n");
-        }
-        if (converterName != null) {
-            sb.append("⚙️  转换器: ").append(converterName).append("\n");
-        }
-
-        sb.append("\n错误: ").append(e.getMessage()).append("\n");
-
-        // 添加特定转换器的建议
-        if (converterName != null) {
-            sb.append("\n💡 ").append(getConverterSpecificAdvice(converterName));
-        }
-
-        return sb.toString();
+    private UserMessageHelper() {
     }
 
-    /**
-     * 获取特定转换器的建议
-     */
+    public static String getUserFriendlyError(Throwable error) {
+        String message = error.getMessage();
+        if (message == null || message.isBlank()) {
+            message = error.getClass().getSimpleName();
+        }
+
+        CliErrorKind kind = classifyError(error, message);
+        switch (kind) {
+            case PDF_PASSWORD:
+                return "PDF password error\n\n"
+                        + "Cause: " + message + "\n\n"
+                        + "Next steps:\n"
+                        + "  - Provide --pdf-password when converting protected PDF files.\n"
+                        + "  - Example: markitdown file.pdf --pdf-password yourpassword\n";
+            case FILE_SIZE:
+                return "File size limit reached\n\n"
+                        + "Cause: " + message + "\n\n"
+                        + "Next steps:\n"
+                        + "  - Use --large-file to disable the configured size limit.\n"
+                        + "  - Use --optimize-memory for large documents when memory pressure is the main issue.\n"
+                        + "  - Example: markitdown large-file.pdf --large-file\n";
+            case UNSUPPORTED_TYPE:
+                return "Unsupported file type\n\n"
+                        + "Cause: " + message + "\n\n"
+                        + "Common supported inputs:\n"
+                        + "  - PDF: .pdf\n"
+                        + "  - Word: .docx, .doc\n"
+                        + "  - Excel: .xlsx, .xls\n"
+                        + "  - PowerPoint: .pptx, .ppt\n"
+                        + "  - HTML: .html, .htm\n"
+                        + "  - Images: .png, .jpg, .jpeg, .gif, .bmp\n"
+                        + "  - Audio: .mp3, .wav, .m4a\n"
+                        + "  - Archives: .zip\n"
+                        + "  - Text: .txt, .md\n";
+            case CONFIGURATION:
+                return "Invalid configuration path\n\n"
+                        + "Cause: " + message + "\n\n"
+                        + "Next steps:\n"
+                        + "  - Verify that --config-path points to an existing .yml or .yaml file.\n"
+                        + "  - Use --generate-config to create a starter configuration file.\n"
+                        + "  - Run --show-config after fixing the path to confirm the effective values.\n";
+            case REMOTE_INPUT:
+                return "Remote input error\n\n"
+                        + "Cause: " + message + "\n\n"
+                        + "Next steps:\n"
+                        + "  - Verify the URL is correct and reachable from the current machine.\n"
+                        + "  - Check HTTP status, redirects, authentication, and network policy.\n"
+                        + "  - Retry with a local file if the remote source is unstable.\n";
+            case OCR_UNAVAILABLE:
+                return "OCR unavailable\n\n"
+                        + "Cause: " + message + "\n\n"
+                        + "Next steps:\n"
+                        + "  - Confirm that the selected OCR engine is installed or configured.\n"
+                        + "  - Verify provider-specific settings such as tesseract path, API endpoint, or API token.\n"
+                        + "  - Use --show-config to confirm the active OCR engine and related settings.\n";
+            case OCR_EXECUTION:
+                return "OCR error\n\n"
+                        + "Cause: " + message + "\n\n"
+                        + "Next steps:\n"
+                        + "  - Confirm that the selected OCR engine is installed or reachable.\n"
+                        + "  - If you use Tesseract, verify the executable path and language data.\n"
+                        + "  - Check language selection with --language.\n"
+                        + "  - Tesseract: https://github.com/tesseract-ocr/tesseract\n"
+                        + "  - Tessdata: https://github.com/tesseract-ocr/tessdata\n";
+            case OUT_OF_MEMORY:
+                return "Out of memory\n\n"
+                        + "Cause: " + message + "\n\n"
+                        + "Next steps:\n"
+                        + "  - Use --optimize-memory for large conversions.\n"
+                        + "  - Increase JVM heap size, for example: java -Xmx2g -jar markitdown4j.jar\n"
+                        + "  - If the limit is intentional, use --large-file only when you want to remove it.\n";
+            case CONVERSION_GENERIC:
+                return formatConversionError((ConversionException) error);
+            case GENERAL:
+            default:
+                return "Conversion failed\n\n"
+                        + "Cause: " + message + "\n\n"
+                        + "Next steps:\n"
+                        + "  - Re-run with --verbose for more diagnostics.\n"
+                        + "  - Check OCR, output path, and input file settings.\n"
+                        + "  - Run --help to review the current CLI options.\n";
+        }
+    }
+
+    private static CliErrorKind classifyError(Throwable error, String message) {
+        String normalized = message == null ? "" : message.toLowerCase();
+
+        if (normalized.contains("cannot decrypt pdf") || normalized.contains("password")) {
+            return CliErrorKind.PDF_PASSWORD;
+        }
+
+        if (normalized.contains("exceeds maximum allowed size")) {
+            return CliErrorKind.FILE_SIZE;
+        }
+
+        if (normalized.contains("unsupported file type")) {
+            return CliErrorKind.UNSUPPORTED_TYPE;
+        }
+
+        if (normalized.contains("configuration file does not exist")
+                || normalized.contains("configuration path is not a file")
+                || normalized.contains("only yaml configuration files are supported")) {
+            return CliErrorKind.CONFIGURATION;
+        }
+
+        if (normalized.contains("failed to download url")
+                || normalized.contains("http ")
+                && normalized.contains(" for http")) {
+            return CliErrorKind.REMOTE_INPUT;
+        }
+
+        if (normalized.contains("is not available")
+                || normalized.contains("not configured")
+                || normalized.contains("unavailable")) {
+            if (normalized.contains("ocr") || normalized.contains("tesseract") || normalized.contains("paddleocr")) {
+                return CliErrorKind.OCR_UNAVAILABLE;
+            }
+        }
+
+        if (normalized.contains("tesseract")
+                || normalized.contains("ocr processing failed")
+                || normalized.contains("http ocr request failed")
+                || normalized.contains("http ocr response")
+                || normalized.contains("paddleocr request failed")
+                || normalized.contains("paddleocr job")
+                || normalized.contains("failed to execute tesseract command")) {
+            return CliErrorKind.OCR_EXECUTION;
+        }
+
+        if (normalized.contains("out of memory") || normalized.contains("java heap space")) {
+            return CliErrorKind.OUT_OF_MEMORY;
+        }
+
+        if (error instanceof ConversionException) {
+            return CliErrorKind.CONVERSION_GENERIC;
+        }
+
+        return CliErrorKind.GENERAL;
+    }
+
+    private static String formatConversionError(ConversionException error) {
+        StringBuilder builder = new StringBuilder("Conversion failed");
+
+        if (error.getFileName() != null && !error.getFileName().isBlank()) {
+            builder.append("\nFile: ").append(error.getFileName());
+        }
+        if (error.getConverterName() != null && !error.getConverterName().isBlank()) {
+            builder.append("\nConverter: ").append(error.getConverterName());
+        }
+
+        builder.append("\n\nCause: ").append(error.getMessage());
+
+        String advice = getConverterSpecificAdvice(error.getConverterName());
+        if (!advice.isBlank()) {
+            builder.append("\n\n").append(advice);
+        }
+        return builder.toString();
+    }
+
     private static String getConverterSpecificAdvice(String converterName) {
+        if (converterName == null || converterName.isBlank()) {
+            return "Run with --verbose to inspect the underlying converter failure.";
+        }
+
         switch (converterName) {
             case "PdfConverter":
-                return "PDF处理建议:\n" +
-                       "  • 加密PDF: 使用 --pdf-password\n" +
-                       "  • 扫描PDF: 使用 --ocr 启用OCR\n" +
-                       "  • 大文件: 使用 --large-file\n" +
-                       "  • 内存优化: 使用 --optimize-memory";
-
+                return "PDF troubleshooting:\n"
+                        + "  - Use --pdf-password for encrypted files.\n"
+                        + "  - Use --ocr when the PDF is image-based.\n"
+                        + "  - Use --large-file or --optimize-memory for large documents.";
             case "DocxConverter":
-                return "Word文档建议:\n" +
-                       "  • 确保文档不是损坏的\n" +
-                       "  • 检查文档是否受密码保护\n" +
-                       "  • 尝试在Word中打开并重新保存";
-
+            case "DocConverter":
+                return "Word troubleshooting:\n"
+                        + "  - Verify the source file is not corrupted.\n"
+                        + "  - Re-export the document if the original file is malformed.";
             case "XlsxConverter":
-                return "Excel表格建议:\n" +
-                       "  • 大文件: 使用 --large-file\n" +
-                       "  • 复杂公式可能无法完全转换\n" +
-                       "  • 尝试另存为.xlsx格式";
-
+            case "XlsConverter":
+                return "Spreadsheet troubleshooting:\n"
+                        + "  - Use --large-file for very large workbooks.\n"
+                        + "  - Check whether the workbook contains unsupported embedded content.";
+            case "PptxConverter":
+            case "PptConverter":
+                return "Presentation troubleshooting:\n"
+                        + "  - Verify the file opens correctly in the source application.\n"
+                        + "  - Re-save the file if the original export is malformed.";
             case "ImageConverter":
-                return "图片处理建议:\n" +
-                       "  • 确保 --ocr 选项已启用\n" +
-                       "  • 检查Tesseract是否正确安装\n" +
-                       "  • 尝试提高图片分辨率\n" +
-                       "  • 使用 --language 指定正确语言";
-
+                return "Image troubleshooting:\n"
+                        + "  - Enable --ocr when converting image files to Markdown text.\n"
+                        + "  - Verify the selected OCR engine is available.\n"
+                        + "  - Set --language when OCR accuracy depends on language hints.";
+            case "AudioConverter":
+                return "Audio troubleshooting:\n"
+                        + "  - Verify the input format is supported.\n"
+                        + "  - Check transcription credentials or endpoint configuration when applicable.";
+            case "HtmlConverter":
+                return "HTML troubleshooting:\n"
+                        + "  - Verify the document uses a supported HTML structure.\n"
+                        + "  - Re-save or simplify the source if the markup is malformed.";
+            case "TextConverter":
+                return "Text troubleshooting:\n"
+                        + "  - Verify the file encoding is readable.\n"
+                        + "  - Re-save the file as UTF-8 when content looks corrupted.";
+            case "ZipConverter":
+                return "Archive troubleshooting:\n"
+                        + "  - Verify the archive is readable.\n"
+                        + "  - Check whether nested files use supported formats.";
             default:
-                return "使用 --verbose 查看更多详细信息";
+                return "Run with --verbose to inspect the underlying converter failure.";
         }
     }
 
-    /**
-     * 获取使用示例
-     */
     public static String getUsageExamples() {
-        return "📚 常用使用示例:\n\n" +
-               "基础转换:\n" +
-               "  markitdown document.pdf\n" +
-               "  markitdown report.docx -o report.md\n\n" +
-
-               "OCR识别:\n" +
-               "  markitdown scanned.pdf --ocr\n" +
-               "  markitdown image.png --ocr -l chi_sim\n\n" +
-
-               "批量处理:\n" +
-               "  markitdown *.pdf --parallel\n" +
-               "  markitdown docs/ --batch --recursive\n\n" +
-
-               "大文件处理:\n" +
-               "  markitdown large.pdf --large-file\n" +
-               "  markitdown huge.xlsx --optimize-memory\n\n" +
-
-               "内容控制:\n" +
-               "  markitdown file.docx --no-images --no-tables\n" +
-               "  markitdown file.pdf --no-metadata\n\n" +
-
-               "性能选项:\n" +
-               "  markitdown *.pdf --parallel --threads=8 --stats\n" +
-               "  markitdown file.pdf --progress --verbose\n";
+        return "Usage examples:\n\n"
+                + "Basic conversion:\n"
+                + "  markitdown document.pdf\n"
+                + "  markitdown report.docx -o report.md\n\n"
+                + "OCR:\n"
+                + "  markitdown scanned.pdf --ocr\n"
+                + "  markitdown image.png --ocr -l chi_sim\n"
+                + "  markitdown file.pdf --ocr-engine paddleocr --ocr-endpoint https://example.com/ocr\n\n"
+                + "Batch and directory processing:\n"
+                + "  markitdown *.pdf --parallel\n"
+                + "  markitdown docs/ --batch --recursive\n\n"
+                + "Large inputs:\n"
+                + "  markitdown large.pdf --large-file\n"
+                + "  markitdown huge.xlsx --optimize-memory\n\n"
+                + "Content controls:\n"
+                + "  markitdown file.docx --no-images --no-tables\n"
+                + "  markitdown file.pdf --no-metadata\n\n"
+                + "Diagnostics:\n"
+                + "  markitdown --show-config\n"
+                + "  markitdown --validate-config\n"
+                + "  markitdown --generate-config\n";
     }
 
-    /**
-     * 获取文件类型检测信息
-     */
     public static String getFileTypeDetectionInfo(String filePath) {
-        if (filePath == null || filePath.isEmpty()) {
-            return "❓ 无法检测文件类型";
+        if (filePath == null || filePath.isBlank()) {
+            return "File type detection requires a non-empty path.";
         }
 
         Path path = Paths.get(filePath);
         String fileName = path.getFileName().toString();
         String extension = getFileExtension(fileName);
-
-        StringBuilder info = new StringBuilder();
-        info.append("📋 文件信息:\n");
-        info.append("  文件名: ").append(fileName).append("\n");
-        info.append("  扩展名: ").append(extension).append("\n");
-
         String detectedType = detectFileType(extension);
-        info.append("  检测类型: ").append(detectedType).append("\n");
 
-        return info.toString();
+        return "File type detection:\n"
+                + "  File: " + fileName + "\n"
+                + "  Extension: " + extension + "\n"
+                + "  Detected type: " + detectedType + "\n";
     }
 
-    /**
-     * 获取文件扩展名
-     */
     private static String getFileExtension(String fileName) {
         int lastDot = fileName.lastIndexOf('.');
         return lastDot > 0 ? fileName.substring(lastDot + 1).toLowerCase() : "";
     }
 
-    /**
-     * 根据扩展名检测文件类型
-     */
     private static String detectFileType(String extension) {
         switch (extension) {
-            case "pdf": return "PDF文档 (支持OCR)";
-            case "docx": case "doc": return "Word文档";
-            case "xlsx": case "xls": return "Excel表格";
-            case "pptx": case "ppt": return "PowerPoint演示文稿";
-            case "html": case "htm": return "HTML网页";
-            case "png": case "jpg": case "jpeg": case "gif": case "bmp": return "图片 (需OCR)";
-            case "mp3": case "wav": case "m4a": return "音频文件";
-            case "zip": return "压缩包";
-            case "txt": case "md": return "文本文件";
-            default: return "未知类型";
+            case "pdf":
+                return "PDF";
+            case "docx":
+            case "doc":
+                return "Word document";
+            case "xlsx":
+            case "xls":
+                return "Spreadsheet";
+            case "pptx":
+            case "ppt":
+                return "Presentation";
+            case "html":
+            case "htm":
+                return "HTML document";
+            case "png":
+            case "jpg":
+            case "jpeg":
+            case "gif":
+            case "bmp":
+                return "Image";
+            case "mp3":
+            case "wav":
+            case "m4a":
+                return "Audio";
+            case "zip":
+                return "ZIP archive";
+            case "txt":
+            case "md":
+                return "Text document";
+            case "csv":
+                return "CSV document";
+            case "json":
+                return "JSON document";
+            case "xml":
+                return "XML document";
+            default:
+                return "Unknown or unsupported";
         }
     }
 }

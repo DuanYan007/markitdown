@@ -19,10 +19,8 @@ public class TesseractCliOcrProvider implements OcrProvider {
 
     @Override
     public OcrEngine create(ConversionOptions options) {
-        String tesseractPath = options.getCustomOption("tesseractPath");
-        if (tesseractPath == null || tesseractPath.isBlank()) {
-            tesseractPath = options.getCustomOption("tesseract.path");
-        }
-        return new TesseractCliOcrEngine(tesseractPath);
+        String tesseractPath = options.ocr().tesseractPath();
+        String tessdataPath = options.ocr().tessdataPath();
+        return new TesseractCliOcrEngine(tesseractPath, tessdataPath);
     }
 }

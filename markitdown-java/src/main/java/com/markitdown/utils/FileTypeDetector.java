@@ -1,16 +1,22 @@
 package com.markitdown.utils;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
- * @class FileTypeDetector
- * @brief 文件类型检测工具类，基于文件扩展名和内容检测文件类型
- * @details 提供MIME类型检测、文本文件识别、文件扩展名处理等功能
- *          支持多种文件格式的检测，包括文档、图片、音频、压缩包等
- *          使用文件签名和内容分析提高检测准确性
+ * Utility methods for file extension and MIME type detection.
+ *
+ * <p>Detection primarily relies on known extensions and falls back to light
+ * content sniffing when an extension is unavailable.</p>
  *
  * @author duan yan
  * @version 2.0.0
@@ -18,18 +24,8 @@ import java.util.*;
  */
 public class FileTypeDetector {
 
-    // ==================== 静态常量 ====================
-
-    /**
-     * @brief 文件扩展名到MIME类型的映射
-     * @details 存储常见文件格式的MIME类型映射关系
-     */
     private static final Map<String, String> EXTENSION_TO_MIME_TYPE;
-
-    /**
-     * @brief 文本文件扩展名集合
-     * @details 包含所有可识别为文本文件的扩展名
-     */
+    private static final Set<String> KNOWN_MIME_TYPES;
     private static final Set<String> TEXT_FILE_EXTENSIONS;
 
     static {
@@ -66,6 +62,7 @@ public class FileTypeDetector {
         EXTENSION_TO_MIME_TYPE.put("bmp", "image/bmp");
         EXTENSION_TO_MIME_TYPE.put("tiff", "image/tiff");
         EXTENSION_TO_MIME_TYPE.put("tif", "image/tiff");
+        EXTENSION_TO_MIME_TYPE.put("webp", "image/webp");
 
         // Archives
         EXTENSION_TO_MIME_TYPE.put("zip", "application/zip");
@@ -89,17 +86,22 @@ public class FileTypeDetector {
         EXTENSION_TO_MIME_TYPE.put("aiff", "audio/aiff");
         EXTENSION_TO_MIME_TYPE.put("au", "audio/basic");
 
+        KNOWN_MIME_TYPES = new HashSet<>(EXTENSION_TO_MIME_TYPE.values());
+        KNOWN_MIME_TYPES.add("application/xhtml+xml");
+        KNOWN_MIME_TYPES.add("text/xml");
+        KNOWN_MIME_TYPES.add("application/x-zip-compressed");
+
         TEXT_FILE_EXTENSIONS = new HashSet<>(Arrays.asList(
                 "txt", "md", "markdown", "csv", "json", "xml", "html", "htm", "log"
         ));
     }
 
     /**
-     * Detects the MIME type of a file based on its extension and content.
+     * Detects the MIME type of a file from its extension or content.
      *
-     * @param filePath the path to the file
-     * @return the detected MIME type, or "application/octet-stream" if unknown
-     * @throws IOException if an I/O error occurs
+     * @param filePath file path to inspect
+     * @return detected MIME type, or {@code application/octet-stream}
+     * @throws IOException when file access fails
      */
     public static String detectMimeType(Path filePath) throws IOException {
         Objects.requireNonNull(filePath, "File path cannot be null");
@@ -108,7 +110,6 @@ public class FileTypeDetector {
         String extension = getFileExtension(fileName);
 
         if (extension.isEmpty()) {
-            // Try to detect by content
             return detectByContent(filePath);
         }
 
@@ -117,10 +118,10 @@ public class FileTypeDetector {
     }
 
     /**
-     * Checks if a file is a text file based on its extension.
+     * Returns whether the file looks like a text file based on its extension.
      *
-     * @param filePath the path to the file
-     * @return true if the file is a text file
+     * @param filePath file path to inspect
+     * @return {@code true} when the extension is treated as text
      */
     public static boolean isTextFile(Path filePath) {
         Objects.requireNonNull(filePath, "File path cannot be null");
@@ -132,10 +133,10 @@ public class FileTypeDetector {
     }
 
     /**
-     * Gets the file extension from a file name.
+     * Returns the file extension without the leading dot.
      *
-     * @param fileName the file name
-     * @return the file extension (without the dot), or empty string if no extension
+     * @param fileName file name
+     * @return extension or an empty string
      */
     public static String getFileExtension(String fileName) {
         Objects.requireNonNull(fileName, "File name cannot be null");
@@ -149,10 +150,10 @@ public class FileTypeDetector {
     }
 
     /**
-     * Gets the file name without extension.
+     * Returns the file name without the extension.
      *
-     * @param fileName the file name
-     * @return the file name without extension
+     * @param fileName file name
+     * @return file name without extension
      */
     public static String getFileNameWithoutExtension(String fileName) {
         Objects.requireNonNull(fileName, "File name cannot be null");
@@ -166,11 +167,11 @@ public class FileTypeDetector {
     }
 
     /**
-     * Detects MIME type by analyzing file content.
+     * Performs lightweight content-based MIME detection when no extension exists.
      *
-     * @param filePath the path to the file
-     * @return the detected MIME type
-     * @throws IOException if an I/O error occurs
+     * @param filePath file path to inspect
+     * @return detected MIME type
+     * @throws IOException when file access fails
      */
     private static String detectByContent(Path filePath) throws IOException {
         if (!Files.exists(filePath) || !Files.isRegularFile(filePath)) {
@@ -178,60 +179,53 @@ public class FileTypeDetector {
         }
 
         byte[] header = new byte[1024];
-        try {
-            int bytesRead = Files.newInputStream(filePath).read(header);
+        try (InputStream inputStream = Files.newInputStream(filePath)) {
+            int bytesRead = inputStream.read(header);
             if (bytesRead <= 0) {
                 return "application/octet-stream";
             }
 
-            // Check for common file signatures
             String headerStr = new String(header, 0, Math.min(bytesRead, 100)).toLowerCase();
 
-            // PDF signature
             if (headerStr.startsWith("%pdf")) {
                 return "application/pdf";
             }
 
-            // HTML signatures
             if (headerStr.contains("<!doctype") || headerStr.contains("<html")) {
                 return "text/html";
             }
 
-            // XML signatures
             if (headerStr.trim().startsWith("<?xml")) {
                 return "application/xml";
             }
 
-            // JSON signatures
-            // Todo: Json格式可以更加细致地判断，容易将纯文本误判为JSON
+            // JSON detection is intentionally simple and can misclassify plain text.
             String trimmed = headerStr.trim();
             if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
                 return "application/json";
             }
 
-            // Default to text if it looks like readable text
             if (isTextContent(header, bytesRead)) {
                 return "text/plain";
             }
 
         } catch (IOException e) {
-            // If we can't read the file, return default
+            // Fall through to the generic binary type.
         }
 
         return "application/octet-stream";
     }
 
     /**
-     * Checks if the given byte array contains text content.
+     * Heuristically checks whether the given bytes look like text.
      *
-     * @param bytes     the byte array to check
-     * @param byteCount the number of valid bytes in the array
-     * @return true if the content appears to be text
+     * @param bytes input buffer
+     * @param byteCount number of valid bytes
+     * @return {@code true} when the content appears textual
      */
     private static boolean isTextContent(byte[] bytes, int byteCount) {
         for (int i = 0; i < byteCount; i++) {
             byte b = bytes[i];
-            // Check for non-text characters (excluding common whitespace and control characters)
             if (b < 0x20 && b != '\t' && b != '\n' && b != '\r') {
                 return false;
             }
@@ -244,58 +238,57 @@ public class FileTypeDetector {
     }
 
     /**
-     * Checks if a byte sequence is a valid UTF-8 continuation.
+     * Validates a byte sequence against common UTF-8 continuation patterns.
      *
-     * @param bytes     the byte array
-     * @param index     the current index
-     * @param maxLength the maximum valid index
-     * @return true if this is a valid UTF-8 continuation
-     */
-    /*
-     UTF-8编码分为单字节，双字节，三字节和四字节
-     除了单字节外，剩余三者除首字节外 其余字节称为继续字节 形如 10xxxxxx(8位)
-     其余首字节格式:
-     双字节  110xxxxx
-     三字节  1110xxxx
-     四字节  11110xxx
+     * @param bytes input buffer
+     * @param index current byte index
+     * @param maxLength number of valid bytes
+     * @return {@code true} when the sequence looks like valid UTF-8
      */
     private static boolean isValidUtf8Continuation(byte[] bytes, int index, int maxLength) {
         byte b = bytes[index];
         if ((b & 0xC0) == 0x80) {
-            // Continuation byte
             return true;
         } else if ((b & 0xE0) == 0xC0 && index + 1 < maxLength) {
-            // Two-byte sequence
             return (bytes[index + 1] & 0xC0) == 0x80;
         } else if ((b & 0xF0) == 0xE0 && index + 2 < maxLength) {
-            // Three-byte sequence
             return (bytes[index + 1] & 0xC0) == 0x80 && (bytes[index + 2] & 0xC0) == 0x80;
         } else if ((b & 0xF8) == 0xF0 && index + 3 < maxLength) {
-            // Four-byte sequence
-            return (bytes[index + 1] & 0xC0) == 0x80 &&
-                   (bytes[index + 2] & 0xC0) == 0x80 &&
-                   (bytes[index + 3] & 0xC0) == 0x80;
+            return (bytes[index + 1] & 0xC0) == 0x80
+                    && (bytes[index + 2] & 0xC0) == 0x80
+                    && (bytes[index + 3] & 0xC0) == 0x80;
         }
         return false;
     }
 
     /**
-     * Gets all supported file extensions.
+     * Returns all supported file extensions.
      *
-     * @return a set of supported file extensions
+     * @return supported extensions
      */
     public static Set<String> getSupportedExtensions() {
         return new HashSet<>(EXTENSION_TO_MIME_TYPE.keySet());
     }
 
     /**
-     * Checks if a file extension is supported.
+     * Returns the known MIME types used by extension and registry lookups.
      *
-     * @param extension the file extension
-     * @return true if supported, false otherwise
+     * @return immutable MIME type set
+     */
+    public static Set<String> getKnownMimeTypes() {
+        return Collections.unmodifiableSet(KNOWN_MIME_TYPES);
+    }
+
+    /**
+     * Returns whether an extension is explicitly supported.
+     *
+     * @param extension file extension
+     * @return {@code true} when supported
      */
     public static boolean isSupportedExtension(String extension) {
+        if (extension == null || extension.isBlank()) {
+            return false;
+        }
         return EXTENSION_TO_MIME_TYPE.containsKey(extension.toLowerCase());
     }
-    // Test
 }

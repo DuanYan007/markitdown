@@ -7,53 +7,52 @@ import java.io.InputStream;
 import java.nio.file.Path;
 
 /**
- * @interface DocumentConverter
- * @brief 文档转换器接口，定义了将各种文件格式转换为Markdown的规范
- * @details 所有具体的文档转换器实现都必须实现此接口，支持不同文件格式的转换
- *          提供了转换支持检查、优先级管理和转换器标识等核心功能
- *          支持 Path 和 InputStream 两种输入方式，便于流式处理和管道操作
+ * Core contract for converters that turn source documents into Markdown.
  *
- * @author duan yan
- * @version 2.1.0
- * @since 2.0.0
+ * <p>Implementations usually declare support for one or more MIME types and
+ * expose a primary path-based conversion entry point. Converters may also opt
+ * into stream-based conversion when they can operate without direct file system
+ * access.</p>
  */
 public interface DocumentConverter {
 
     /**
-     * @brief 将文档文件转换为Markdown格式（基于文件路径）
-     * @details 核心转换方法，将指定路径的文档文件转换为Markdown内容
-     *          支持通过转换选项控制转换行为和输出格式
-     * @param filePath 要转换的文档文件路径，不能为null
-     * @param options  转换选项配置，可以为null（使用默认配置）
-     * @return ConversionResult 包含Markdown内容和元数据的转换结果
-     * @throws ConversionException 当转换失败时抛出异常
+     * Converts a file on disk to Markdown.
+     *
+     * @param filePath source file path
+     * @param options conversion options
+     * @return conversion result containing Markdown, metadata, and warnings
+     * @throws ConversionException when conversion fails
      */
     ConversionResult convert(Path filePath, ConversionOptions options) throws ConversionException;
 
     /**
-     * @brief 将文档流转换为Markdown格式（基于输入流）
-     * @details 流式转换方法，从输入流读取文档内容并转换为Markdown
-     *          支持管道输入、内存流等场景，避免创建临时文件
-     * @param inputStream 包含文档内容的输入流，不能为null
-     * @param mimeType    文档的MIME类型，用于选择正确的解析方式
-     * @param options     转换选项配置，可以为null（使用默认配置）
-     * @return ConversionResult 包含Markdown内容和元数据的转换结果
-     * @throws ConversionException 当转换失败时抛出异常
+     * Converts a document stream to Markdown.
+     *
+     * <p>The default implementation rejects streaming so converters only need to
+     * override this method when they explicitly support it.</p>
+     *
+     * @param inputStream source document stream
+     * @param mimeType detected or declared MIME type
+     * @param options conversion options
+     * @return conversion result containing Markdown, metadata, and warnings
+     * @throws ConversionException when streaming is unsupported or conversion fails
      * @since 2.1.0
      */
-    default ConversionResult convert(InputStream inputStream, String mimeType, ConversionOptions options) throws ConversionException {
-        // 默认实现：不支持流式转换，抛出异常
+    default ConversionResult convert(InputStream inputStream, String mimeType, ConversionOptions options)
+            throws ConversionException {
         throw new ConversionException(
-            "Stream-based conversion is not supported by " + getName() + ". Use Path-based convert() method instead.",
-            "stream",
-            getName()
+                "Stream-based conversion is not supported by " + getName() + ". Use Path-based convert() method instead.",
+                "stream",
+                getName()
         );
     }
 
     /**
-     * @brief 检查是否支持流式转换
-     * @details 用于判断转换器是否支持从 InputStream 读取数据
-     * @return boolean true表示支持流式转换，false表示不支持
+     * Indicates whether this converter supports stream-based conversion.
+     *
+     * @return {@code true} when {@link #convert(InputStream, String, ConversionOptions)}
+     *         is implemented, otherwise {@code false}
      * @since 2.1.0
      */
     default boolean supportsStreaming() {
@@ -61,28 +60,28 @@ public interface DocumentConverter {
     }
 
     /**
-     * @brief 检查是否支持指定的MIME类型
-     * @details 用于判断转换器是否能够处理特定类型的文件
-     *          支持根据MIME类型自动选择合适的转换器
-     * @param mimeType 要检查的MIME类型，不能为null
-     * @return boolean true表示支持该MIME类型，false表示不支持
+     * Checks whether the converter supports a MIME type.
+     *
+     * @param mimeType MIME type to evaluate
+     * @return {@code true} when the converter can handle the MIME type
      */
     boolean supports(String mimeType);
 
     /**
-     * @brief 获取转换器优先级
-     * @details 当多个转换器支持同一MIME类型时，优先级高的转换器会被优先选择
-     *          优先级值越大表示优先级越高，默认优先级为0
-     * @return int 转换器优先级值，默认为0
+     * Returns the converter priority used during registry selection.
+     *
+     * <p>Higher values win when multiple converters support the same MIME type.</p>
+     *
+     * @return converter priority
      */
     default int getPriority() {
         return 0;
     }
 
     /**
-     * @brief 获取转换器名称
-     * @details 返回转换器的唯一标识名称，用于日志记录和调试
-     * @return String 转换器名称，不能为null或空字符串
+     * Returns the human-readable converter name.
+     *
+     * @return converter name
      */
     String getName();
 }

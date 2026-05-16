@@ -1,5 +1,8 @@
 package com.markitdown.converters;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.markdown.engine.MarkdownBuilder;
 import com.markitdown.api.ConversionResult;
 import com.markitdown.api.DocumentConverter;
 import com.markitdown.config.ConversionOptions;
@@ -13,74 +16,51 @@ import org.apache.tika.sax.BodyContentHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * @class AudioConverter
- * @brief 音频文件转换器，用于将音频文件转换为 Markdown 格式
- * @details 使用 Apache Tika 库提取音频文件元数据，支持多种音频格式
- *          提供可选的 OpenAI Whisper API 语音转写功能
- *          支持流式处理（仅元数据提取）
- *          包含文件信息、音频元数据和转录文本的完整文档结构
- *
- * @author duan yan
- * @version 2.1.0
- * @since 2.0.0
+ * Converts audio files into Markdown with extracted metadata and optional transcription.
  */
 public class AudioConverter implements DocumentConverter {
 
     private static final Logger logger = LoggerFactory.getLogger(AudioConverter.class);
-
-    /**
-     * @brief 支持的音频格式集合
-     */
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Set<String> SUPPORTED_FORMATS = Set.of(
             "mp3", "wav", "ogg", "flac", "m4a", "aac", "opus", "wma", "aiff", "au"
     );
+    private static final String DEFAULT_TRANSCRIPTION_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions";
+    private static final String DEFAULT_TRANSCRIPTION_MODEL = "whisper-1";
+    private static final long MAX_TRANSCRIPTION_SIZE = 25 * 1024 * 1024;
 
-    /**
-     * @brief OpenAI API endpoint for Whisper
-     */
-    private static final String OPENAI_WHISPER_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions";
-
-    /**
-     * @brief 最大音频文件大小（用于转写）
-     */
-    private static final long MAX_TRANSCRIPTION_SIZE = 25 * 1024 * 1024; // 25MB
-
-    /**
-     * @brief OpenAI API Key（可选）
-     */
     private String openaiApiKey;
 
-    /**
-     * @brief 默认构造函数
-     */
     public AudioConverter() {
-        // 从环境变量获取 API Key
-        this.openaiApiKey = System.getenv("OPENAI_API_KEY");
     }
 
-    /**
-     * @brief 带 API Key 的构造函数
-     * @param openaiApiKey OpenAI API Key，用于语音转写
-     */
     public AudioConverter(String openaiApiKey) {
         this.openaiApiKey = openaiApiKey;
     }
 
-    /**
-     * @brief 设置 OpenAI API Key
-     */
     public void setOpenaiApiKey(String apiKey) {
         this.openaiApiKey = apiKey;
     }
@@ -93,26 +73,24 @@ public class AudioConverter implements DocumentConverter {
         logger.info("Converting audio file: {}", filePath);
 
         try {
-            // 提取音频元数据
+            resolveApiKey(options);
             Map<String, Object> metadata = extractAudioMetadata(filePath, options);
-
-            // 生成转写内容
             String transcriptionContent = generateTranscription(filePath, options);
-
-            // 转换为 Markdown 格式
             String markdownContent = convertToMarkdown(filePath, metadata, transcriptionContent, options);
 
             List<String> warnings = new ArrayList<>();
-
-            // 如果没有可用的 API Key，添加警告
-            if (options.isUseOcr() && (openaiApiKey == null || openaiApiKey.isEmpty())) {
-                warnings.add("OpenAI API Key not configured. Audio transcription is not available. " +
-                        "Set OPENAI_API_KEY environment variable or use setApiKey() method.");
+            if (options.ocr().enabled() && (openaiApiKey == null || openaiApiKey.isBlank())) {
+                warnings.add("OpenAI API key is not configured. Audio transcription is unavailable. "
+                        + "Set `ocr.api_key` in `markitdown.yml` or `markitdown.local.yml`.");
             }
 
-            return new ConversionResult(markdownContent, metadata, warnings,
-                    filePath.toFile().length(), filePath.getFileName().toString());
-
+            return new ConversionResult(
+                    markdownContent,
+                    metadata,
+                    warnings,
+                    filePath.toFile().length(),
+                    filePath.getFileName().toString()
+            );
         } catch (Exception e) {
             String errorMessage = "Failed to process audio file: " + e.getMessage();
             logger.error(errorMessage, e);
@@ -127,7 +105,7 @@ public class AudioConverter implements DocumentConverter {
 
     @Override
     public boolean supportsStreaming() {
-        return false; // 音频处理需要完整文件
+        return false;
     }
 
     @Override
@@ -140,36 +118,27 @@ public class AudioConverter implements DocumentConverter {
         return "AudioConverter";
     }
 
-    /**
-     * @brief 使用 Apache Tika 提取音频元数据
-     */
     private Map<String, Object> extractAudioMetadata(Path filePath, ConversionOptions options) {
         Map<String, Object> metadata = new LinkedHashMap<>();
-
         String fileName = filePath.getFileName().toString();
         String fileExtension = getFileExtension(fileName).toLowerCase();
 
-        // 基本文件信息
         metadata.put("File Name", fileName);
         metadata.put("File Size", formatFileSize(filePath.toFile().length()));
         metadata.put("Format", "audio/" + fileExtension);
 
-        if (!options.isIncludeMetadata()) {
+        if (!options.content().includeMetadata()) {
             return metadata;
         }
 
         try (InputStream stream = Files.newInputStream(filePath)) {
-            // 使用适当的解析器
             Parser parser = new AutoDetectParser();
-
             Metadata tikaMetadata = new Metadata();
             BodyContentHandler handler = new BodyContentHandler();
             ParseContext context = new ParseContext();
             context.set(Parser.class, parser);
-
             parser.parse(stream, handler, tikaMetadata, context);
 
-            // 提取音频特定元数据
             addIfNotEmpty(metadata, "Title", tikaMetadata.get("title"));
             addIfNotEmpty(metadata, "Artist", tikaMetadata.get("xmpDM:artist"));
             addIfNotEmpty(metadata, "Album", tikaMetadata.get("xmpDM:album"));
@@ -182,15 +151,10 @@ public class AudioConverter implements DocumentConverter {
             addIfNotEmpty(metadata, "Channel Type", tikaMetadata.get("xmpDM:audioChannelType"));
             addIfNotEmpty(metadata, "Bitrate", tikaMetadata.get("xmpDM:audioCompressor"));
 
-            // 检测 MIME 类型
             Tika tika = new Tika();
-            String detectedMime = tika.detect(filePath.toFile());
-            metadata.put("Detected MIME Type", detectedMime);
-
-            logger.debug("Successfully extracted metadata from audio file: {}", fileName);
-
+            metadata.put("Detected MIME Type", tika.detect(filePath.toFile()));
         } catch (Exception e) {
-            logger.warn("Failed to extract detailed metadata: {}", e.getMessage());
+            logger.warn("Failed to extract detailed audio metadata: {}", e.getMessage());
             metadata.put("Metadata Error", e.getMessage());
         }
 
@@ -198,120 +162,74 @@ public class AudioConverter implements DocumentConverter {
         return metadata;
     }
 
-    /**
-     * @brief 格式化时长（毫秒转换为 mm:ss 格式）
-     */
-    private String formatDuration(String durationMs) {
-        if (durationMs == null || durationMs.isEmpty()) {
-            return null;
-        }
-        try {
-            double ms = Double.parseDouble(durationMs);
-            long seconds = (long) (ms / 1000);
-            long minutes = seconds / 60;
-            seconds = seconds % 60;
-            return String.format("%d:%02d", minutes, seconds);
-        } catch (NumberFormatException e) {
-            return durationMs;
-        }
-    }
-
-    /**
-     * @brief 如果值不为空则添加到 map
-     */
-    private void addIfNotEmpty(Map<String, Object> map, String key, String value) {
-        if (value != null && !value.trim().isEmpty()) {
-            map.put(key, value);
-        }
-    }
-
-    /**
-     * @brief 生成音频转写内容
-     */
     private String generateTranscription(Path filePath, ConversionOptions options) {
-        // 如果不需要转写，返回占位符
-        if (!options.isUseOcr()) {
+        if (!options.ocr().enabled()) {
             return "*Audio transcription is disabled in conversion options.*";
         }
 
-        // 检查 API Key 是否配置
-        if (openaiApiKey == null || openaiApiKey.isEmpty()) {
+        resolveApiKey(options);
+        if (openaiApiKey == null || openaiApiKey.isBlank()) {
             return generateTranscriptionPlaceholder(filePath);
         }
 
-        // 检查文件大小限制
         long fileSize = filePath.toFile().length();
         if (fileSize > MAX_TRANSCRIPTION_SIZE) {
-            logger.warn("Audio file too large for transcription: {} bytes (max: {} bytes)", fileSize, MAX_TRANSCRIPTION_SIZE);
-            return "*Audio file is too large for transcription (max 25MB).*\n\n" +
-                   generateTranscriptionPlaceholder(filePath);
+            logger.warn(
+                    "Audio file too large for transcription: {} bytes (max: {} bytes)",
+                    fileSize,
+                    MAX_TRANSCRIPTION_SIZE
+            );
+            return "*Audio file is too large for transcription (max 25 MB).*\n\n"
+                    + generateTranscriptionPlaceholder(filePath);
         }
 
-        // 尝试使用 Whisper API 转写
         try {
-            String transcription = transcribeWithWhisper(filePath, options);
-            if (transcription != null && !transcription.isEmpty()) {
-                return transcription;
+            String transcription = transcribe(filePath, options);
+            if (transcription != null && !transcription.isBlank()) {
+                return transcription.trim();
             }
         } catch (Exception e) {
-            logger.error("Whisper transcription failed: {}", e.getMessage());
-            return "*Transcription failed: " + e.getMessage() + "*\n\n" +
-                   generateTranscriptionPlaceholder(filePath);
+            logger.error("Audio transcription failed: {}", e.getMessage());
+            return "*Transcription failed: " + e.getMessage() + "*\n\n"
+                    + generateTranscriptionPlaceholder(filePath);
         }
 
         return generateTranscriptionPlaceholder(filePath);
     }
 
-    /**
-     * @brief 使用 OpenAI Whisper API 进行语音转写
-     */
-    private String transcribeWithWhisper(Path filePath, ConversionOptions options) throws IOException {
-        logger.info("Transcribing audio file with OpenAI Whisper: {}", filePath);
+    private String transcribe(Path filePath, ConversionOptions options) throws IOException {
+        logger.info("Transcribing audio file: {}", filePath);
 
-        String boundary = "----WebKitFormBoundary" + UUID.randomUUID().toString().replace("-", "");
-        URL url = new URL(OPENAI_WHISPER_ENDPOINT);
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        ConversionOptions.OcrOptions ocr = options.ocr();
+        String endpoint = resolveTranscriptionEndpoint(ocr.endpoint());
+        String model = resolveTranscriptionModel(ocr.model());
+        int timeoutMillis = Math.max(ocr.timeout(), 1000);
+        String boundary = "----MarkItDownBoundary" + UUID.randomUUID().toString().replace("-", "");
 
+        HttpURLConnection connection = (HttpURLConnection) new URL(endpoint).openConnection();
         try {
             connection.setDoOutput(true);
             connection.setRequestMethod("POST");
+            connection.setConnectTimeout(timeoutMillis);
+            connection.setReadTimeout(timeoutMillis);
             connection.setRequestProperty("Authorization", "Bearer " + openaiApiKey);
             connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
 
-            // 构建多部分表单数据
-            try (OutputStream os = connection.getOutputStream();
-                 PrintWriter writer = new PrintWriter(new OutputStreamWriter(os, StandardCharsets.UTF_8), true)) {
+            try (OutputStream outputStream = connection.getOutputStream();
+                 PrintWriter writer = new PrintWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8), true)) {
 
-                // 文件部分
-                writer.append("--").append(boundary).append("\r\n");
-                writer.append("Content-Disposition: form-data; name=\"file\"; filename=\"")
-                      .append(filePath.getFileName().toString()).append("\"\r\n");
-                writer.append("Content-Type: ").append(Files.probeContentType(filePath)).append("\r\n\r\n");
-                writer.flush();
+                writeFilePart(writer, outputStream, boundary, filePath);
+                writeFormField(writer, boundary, "model", model);
 
-                // 写入文件内容
-                Files.copy(filePath, os);
-                os.flush();
-
-                writer.append("\r\n");
-
-                // 模型部分
-                writer.append("--").append(boundary).append("\r\n");
-                writer.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n");
-                writer.append("whisper-1\r\n");
-
-                // 语言部分（如果指定）
-                String language = options.getLanguage();
-                if (language != null && !"auto".equals(language)) {
-                    writer.append("--").append(boundary).append("\r\n");
-                    writer.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n");
-                    writer.append(language).append("\r\n");
+                String language = ocr.language();
+                if (language != null && !language.isBlank() && !"auto".equals(language)) {
+                    writeFormField(writer, boundary, "language", language);
                 }
 
                 writer.append("--").append(boundary).append("--\r\n");
+                writer.flush();
             }
 
-            // 读取响应
             int responseCode = connection.getResponseCode();
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 try (BufferedReader reader = new BufferedReader(
@@ -321,126 +239,160 @@ public class AudioConverter implements DocumentConverter {
                     while ((line = reader.readLine()) != null) {
                         response.append(line);
                     }
-
-                    // 解析 JSON 响应提取 text 字段
                     return parseTranscriptionResponse(response.toString());
                 }
-            } else {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(connection.getErrorStream(), StandardCharsets.UTF_8))) {
-                    StringBuilder errorResponse = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        errorResponse.append(line);
-                    }
-                    throw new IOException("Whisper API error (HTTP " + responseCode + "): " + errorResponse);
+            }
+
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(connection.getErrorStream(), StandardCharsets.UTF_8))) {
+                StringBuilder errorResponse = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    errorResponse.append(line);
                 }
+                throw new IOException("Transcription API error (HTTP " + responseCode + "): " + errorResponse);
             }
         } finally {
             connection.disconnect();
         }
     }
 
-    /**
-     * @brief 解析 Whisper API 响应
-     */
+    private void writeFilePart(PrintWriter writer, OutputStream outputStream, String boundary, Path filePath)
+            throws IOException {
+        writer.append("--").append(boundary).append("\r\n");
+        writer.append("Content-Disposition: form-data; name=\"file\"; filename=\"")
+                .append(filePath.getFileName().toString())
+                .append("\"\r\n");
+
+        String contentType = Files.probeContentType(filePath);
+        if (contentType == null || contentType.isBlank()) {
+            contentType = "application/octet-stream";
+        }
+
+        writer.append("Content-Type: ").append(contentType).append("\r\n\r\n");
+        writer.flush();
+
+        Files.copy(filePath, outputStream);
+        outputStream.flush();
+        writer.append("\r\n");
+        writer.flush();
+    }
+
+    private void writeFormField(PrintWriter writer, String boundary, String name, String value) {
+        writer.append("--").append(boundary).append("\r\n");
+        writer.append("Content-Disposition: form-data; name=\"").append(name).append("\"\r\n\r\n");
+        writer.append(value).append("\r\n");
+        writer.flush();
+    }
+
     private String parseTranscriptionResponse(String jsonResponse) {
-        // 简单的 JSON 解析（提取 "text" 字段）
-        // 在生产环境中应使用 Jackson 或 Gson
         try {
-            int textIndex = jsonResponse.indexOf("\"text\":\"");
-            if (textIndex >= 0) {
-                int startIndex = textIndex + 8;
-                int endIndex = jsonResponse.indexOf("\"", startIndex);
-                if (endIndex > startIndex) {
-                    String text = jsonResponse.substring(startIndex, endIndex);
-                    // 处理转义字符
-                    return text.replace("\\n", "\n")
-                              .replace("\\\"", "\"")
-                              .replace("\\\\", "\\");
-                }
+            JsonNode root = OBJECT_MAPPER.readTree(jsonResponse);
+            JsonNode textNode = root.get("text");
+            if (textNode != null && textNode.isTextual()) {
+                return textNode.asText();
             }
         } catch (Exception e) {
-            logger.warn("Failed to parse Whisper response: {}", e.getMessage());
+            logger.warn("Failed to parse transcription response: {}", e.getMessage());
         }
         return jsonResponse;
     }
 
-    /**
-     * @brief 生成转写占位符内容
-     */
-    private String generateTranscriptionPlaceholder(Path filePath) {
-        StringBuilder placeholder = new StringBuilder();
-        placeholder.append("*Audio transcription is not available.*\n\n");
-        placeholder.append("To enable audio transcription:\n\n");
-        placeholder.append("1. **Configure OpenAI API Key:**\n");
-        placeholder.append("   - Set environment variable: `OPENAI_API_KEY=your-api-key`\n");
-        placeholder.append("   - Or use: `new AudioConverter(apiKey)`\n\n");
-        placeholder.append("2. **Alternative transcription services:**\n");
-        placeholder.append("   - Google Speech-to-Text API\n");
-        placeholder.append("   - AWS Transcribe\n");
-        placeholder.append("   - Azure Speech Services\n");
-        placeholder.append("   - Local Whisper model\n\n");
-        placeholder.append("**File:** `").append(filePath.getFileName()).append("`\n");
-
-        return placeholder.toString();
+    private String resolveTranscriptionEndpoint(String configuredEndpoint) {
+        if (configuredEndpoint == null || configuredEndpoint.isBlank()) {
+            return DEFAULT_TRANSCRIPTION_ENDPOINT;
+        }
+        return configuredEndpoint;
     }
 
-    /**
-     * @brief 将音频信息转换为 Markdown 格式
-     */
-    private String convertToMarkdown(Path filePath, Map<String, Object> metadata,
-                                   String transcription, ConversionOptions options) {
+    private String resolveTranscriptionModel(String configuredModel) {
+        if (configuredModel == null || configuredModel.isBlank()) {
+            return DEFAULT_TRANSCRIPTION_MODEL;
+        }
+        return configuredModel;
+    }
+
+    private String generateTranscriptionPlaceholder(Path filePath) {
+        return "*Audio transcription is not available.*\n\n"
+                + "To enable audio transcription:\n\n"
+                + "1. Configure `ocr.api_key` in `markitdown.yml` or `markitdown.local.yml`\n"
+                + "2. Optionally configure `ocr.endpoint` and `ocr.model`\n\n"
+                + "**File:** `" + filePath.getFileName() + "`\n";
+    }
+
+    private void resolveApiKey(ConversionOptions options) {
+        if (openaiApiKey == null || openaiApiKey.isBlank()) {
+            openaiApiKey = options.ocr().apiKey();
+        }
+    }
+
+    private String convertToMarkdown(
+            Path filePath,
+            Map<String, Object> metadata,
+            String transcription,
+            ConversionOptions options
+    ) {
         StringBuilder markdown = new StringBuilder();
-
+        MarkdownBuilder builder = new MarkdownBuilder();
         String fileName = filePath.getFileName().toString();
-        String title = getFileNameWithoutExtension(fileName);
+        String title = builder.escapeMarkdown(getFileNameWithoutExtension(fileName));
+        String escapedFileName = builder.escapeMarkdown(fileName);
 
-        // 添加标题
         markdown.append("# ").append(title).append("\n\n");
+        markdown.append("**File:** `").append(escapedFileName).append("`\n\n");
 
-        // 添加音频文件信息
-        markdown.append("## Audio File\n\n");
-        markdown.append("**File:** `").append(fileName).append("`\n\n");
-
-        // 添加元数据部分
-        if (!metadata.isEmpty()) {
+        if (options.content().includeMetadata() && !metadata.isEmpty()) {
             markdown.append("## Metadata\n\n");
             for (Map.Entry<String, Object> entry : metadata.entrySet()) {
                 if (entry.getValue() != null) {
-                    markdown.append("- **").append(entry.getKey())
-                            .append(":** ").append(entry.getValue()).append("\n");
+                    markdown.append("- **")
+                            .append(entry.getKey())
+                            .append(":** ")
+                            .append(entry.getValue())
+                            .append("\n");
                 }
             }
             markdown.append("\n");
         }
 
-        // 添加转写部分
         markdown.append("## Transcription\n\n");
-        markdown.append(transcription);
-        markdown.append("\n");
-
+        markdown.append(transcription).append("\n");
         return markdown.toString();
     }
 
-    /**
-     * @brief 获取文件扩展名
-     */
+    private String formatDuration(String durationMs) {
+        if (durationMs == null || durationMs.isEmpty()) {
+            return null;
+        }
+
+        try {
+            double milliseconds = Double.parseDouble(durationMs);
+            long seconds = (long) (milliseconds / 1000);
+            long minutes = seconds / 60;
+            seconds = seconds % 60;
+            return String.format("%d:%02d", minutes, seconds);
+        } catch (NumberFormatException e) {
+            return durationMs;
+        }
+    }
+
+    private void addIfNotEmpty(Map<String, Object> map, String key, String value) {
+        if (value != null && !value.trim().isEmpty()) {
+            map.put(key, value);
+        }
+    }
+
     private String getFileExtension(String fileName) {
         requireNonNull(fileName, "File name cannot be null");
-
         int lastDotIndex = fileName.lastIndexOf('.');
         if (lastDotIndex > 0 && lastDotIndex < fileName.length() - 1) {
             return fileName.substring(lastDotIndex + 1);
         }
-
         return "";
     }
 
-    /**
-     * @brief 获取不带扩展名的文件名
-     */
     private String getFileNameWithoutExtension(String fileName) {
+        requireNonNull(fileName, "File name cannot be null");
         int lastDotIndex = fileName.lastIndexOf('.');
         if (lastDotIndex > 0) {
             return fileName.substring(0, lastDotIndex);
@@ -448,32 +400,24 @@ public class AudioConverter implements DocumentConverter {
         return fileName;
     }
 
-    /**
-     * @brief 格式化文件大小
-     */
     private String formatFileSize(long fileSize) {
         if (fileSize < 1024) {
             return fileSize + " B";
-        } else if (fileSize < 1024 * 1024) {
-            return String.format("%.1f KB", fileSize / 1024.0);
-        } else if (fileSize < 1024 * 1024 * 1024) {
-            return String.format("%.1f MB", fileSize / (1024.0 * 1024.0));
-        } else {
-            return String.format("%.1f GB", fileSize / (1024.0 * 1024.0 * 1024.0));
         }
+        if (fileSize < 1024 * 1024) {
+            return String.format("%.1f KB", fileSize / 1024.0);
+        }
+        if (fileSize < 1024L * 1024L * 1024L) {
+            return String.format("%.1f MB", fileSize / (1024.0 * 1024.0));
+        }
+        return String.format("%.1f GB", fileSize / (1024.0 * 1024.0 * 1024.0));
     }
 
-    /**
-     * @brief 检查文件格式是否被支持
-     */
     public static boolean isSupportedFormat(String fileExtension) {
         return fileExtension != null && SUPPORTED_FORMATS.contains(fileExtension.toLowerCase());
     }
 
-    /**
-     * @brief 获取所有支持的音频格式
-     */
     public static Set<String> getSupportedFormats() {
-        return new HashSet<>(SUPPORTED_FORMATS);
+        return Set.copyOf(SUPPORTED_FORMATS);
     }
 }

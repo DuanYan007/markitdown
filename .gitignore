@@ -121,3 +121,7 @@ test.md
 smoke-out/
 _release_build/
 _release_build_2/
+functional-out/
+probe-out/
+probe-heavy-out/
+probe-stress-out/

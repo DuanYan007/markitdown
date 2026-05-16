@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 
 /**
- * 模拟OCR引擎 - 用于演示和测试
+ * Mock OCR engine used for demos and lightweight testing.
  */
 public class MockOcrEngine implements OcrEngine {
 
@@ -14,37 +14,32 @@ public class MockOcrEngine implements OcrEngine {
 
     @Override
     public String extractText(File imageFile) throws OcrException {
-        logger.info("使用模拟OCR引擎处理: {}", imageFile.getName());
+        logger.info("Processing with mock OCR engine: {}", imageFile.getName());
 
-        // 根据文件名模拟不同的OCR结果
         String fileName = imageFile.getName().toLowerCase();
 
         if (fileName.contains("chinese")) {
-            return "### 中文测试文档\n\n" +
-                   "这是一个模拟的OCR识别结果。\n\n" +
-                   "在实际部署中,这里将显示真实的OCR识别文本。\n\n" +
-                   "当前使用模拟引擎是为了让您快速看到效果。\n\n" +
-                   "OCR引擎状态: 模拟模式\n" +
-                   "识别准确率: 模拟100%\n" +
-                   "处理速度: 即时";
-
+            return "### Chinese OCR Sample\n\n" +
+                    "This is a simulated OCR result for a Chinese-language input.\n\n" +
+                    "In a real deployment, recognized text from the OCR engine would appear here.\n\n" +
+                    "Engine Status: Mock Mode\n" +
+                    "Recognition Accuracy: Simulated 100%\n" +
+                    "Processing Speed: Instant";
         } else if (fileName.contains("text")) {
             return "### Sample OCR Result\n\n" +
-                   "This is a simulated OCR recognition result.\n\n" +
-                   "In actual deployment, real OCR recognized text will appear here.\n\n" +
-                   "Current mock engine is for quick demonstration.\n\n" +
-                   "OCR Engine Status: Mock Mode\n" +
-                   "Recognition Accuracy: Simulated 100%\n" +
-                   "Processing Speed: Instant";
-
+                    "This is a simulated OCR recognition result.\n\n" +
+                    "In a real deployment, recognized text from the OCR engine would appear here.\n\n" +
+                    "Engine Status: Mock Mode\n" +
+                    "Recognition Accuracy: Simulated 100%\n" +
+                    "Processing Speed: Instant";
         } else {
             return "### OCR Result\n\n" +
-                   "Image file: " + imageFile.getName() + "\n\n" +
-                   "This is a simulated OCR result for demonstration purposes.\n\n" +
-                   "Install Tesseract for real OCR functionality:\n" +
-                   "- Windows: https://github.com/UB-Mannheim/tesseract/wiki\n" +
-                   "- Linux: sudo apt-get install tesseract-ocr\n" +
-                   "- Mac: brew install tesseract";
+                    "Image file: " + imageFile.getName() + "\n\n" +
+                    "This is a simulated OCR result for demonstration purposes.\n\n" +
+                    "Install Tesseract for real OCR functionality:\n" +
+                    "- Windows: https://github.com/UB-Mannheim/tesseract/wiki\n" +
+                    "- Linux: sudo apt-get install tesseract-ocr\n" +
+                    "- Mac: brew install tesseract";
         }
     }
 
@@ -56,7 +51,7 @@ public class MockOcrEngine implements OcrEngine {
 
     @Override
     public boolean isAvailable() {
-        return true; // 模拟引擎总是可用
+        return true;
     }
 
     @Override

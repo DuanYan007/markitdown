@@ -1,0 +1,2 @@
+MarkItDown release smoke fixture.
+This file verifies basic local text conversion.

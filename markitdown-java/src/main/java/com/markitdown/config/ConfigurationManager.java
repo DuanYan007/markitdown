@@ -6,10 +6,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -17,15 +14,15 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Properties;
+import java.util.Set;
 
 /**
- * Configuration manager with YAML-first loading and legacy properties compatibility.
+ * Configuration manager with YAML-only loading.
  */
 public class ConfigurationManager {
 
@@ -34,90 +31,59 @@ public class ConfigurationManager {
     private static final String PRIMARY_YAML_CONFIG_FILE = "markitdown.yml";
     private static final String LOCAL_YAML_CONFIG_FILE = "markitdown.local.yml";
     private static final String EXAMPLE_YAML_CONFIG_FILE = "markitdown.example.yml";
-    private static final String LEGACY_PROPERTIES_CONFIG_FILE = ".markitdown.properties";
 
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
 
-    private final Properties properties;
+    private final Map<String, String> values;
+    private final Map<String, TrackedValue> trackedProperties;
     private final Path baseDirectory;
+    private final Path explicitConfigPath;
+    private EffectiveConfiguration effectiveConfiguration;
 
     public ConfigurationManager() {
         this(Paths.get(System.getProperty("user.dir")));
     }
 
     public ConfigurationManager(Path baseDirectory) {
+        this(baseDirectory, null);
+    }
+
+    public ConfigurationManager(Path baseDirectory, Path explicitConfigPath) {
         this.baseDirectory = baseDirectory.toAbsolutePath().normalize();
-        this.properties = loadConfiguration();
+        this.explicitConfigPath = explicitConfigPath == null ? null : explicitConfigPath.toAbsolutePath().normalize();
+        if (this.explicitConfigPath != null && !isYamlFile(this.explicitConfigPath)) {
+            throw new IllegalArgumentException("Only YAML configuration files are supported: " + this.explicitConfigPath);
+        }
+        LoadedConfiguration configuration = loadConfiguration();
+        this.values = configuration.values;
+        this.trackedProperties = configuration.trackedProperties;
     }
 
-    private Properties loadConfiguration() {
-        Properties defaults = createDefaultProperties();
-        Properties props = new Properties();
-        props.putAll(defaults);
+    private LoadedConfiguration loadConfiguration() {
+        Map<String, String> defaults = createDefaultValues();
+        Map<String, String> resolvedValues = new LinkedHashMap<>(defaults);
+        Map<String, TrackedValue> tracked = initializeTrackedDefaults(defaults);
 
-        loadYamlFile(findConfigFile(PRIMARY_YAML_CONFIG_FILE), props);
-        loadYamlFile(findProjectLocalConfigFile(LOCAL_YAML_CONFIG_FILE), props);
-        loadLegacyProperties(findConfigFile(LEGACY_PROPERTIES_CONFIG_FILE), props);
-        applyEnvironmentVariables(props, defaults);
+        if (explicitConfigPath != null) {
+            loadYamlFile(explicitConfigPath, resolvedValues, tracked, ConfigSource.EXPLICIT_YAML);
+        } else {
+            loadYamlFile(findProjectLocalConfigFile(PRIMARY_YAML_CONFIG_FILE), resolvedValues, tracked, ConfigSource.PROJECT_YAML);
+            loadYamlFile(findProjectLocalConfigFile(LOCAL_YAML_CONFIG_FILE), resolvedValues, tracked, ConfigSource.LOCAL_YAML);
+        }
 
-        return props;
+        return new LoadedConfiguration(resolvedValues, tracked);
     }
 
-    private Properties createDefaultProperties() {
-        Properties props = new Properties();
-        setDefaultValues(props);
-        return props;
+    private Map<String, String> createDefaultValues() {
+        Map<String, String> defaults = new LinkedHashMap<>();
+        for (ConfigKey key : ConfigKey.values()) {
+            defaults.put(key.key, key.defaultValue);
+        }
+        return defaults;
     }
 
-    private void setDefaultValues(Properties props) {
-        props.setProperty("app.profile", "default");
-
-        props.setProperty("tesseract.path", "");
-        props.setProperty("tessdata.path", "");
-
-        props.setProperty("output.dir", "./output");
-        props.setProperty("output.image.dir", "assets");
-        props.setProperty("output.temp.dir", System.getProperty("java.io.tmpdir"));
-        props.setProperty("output.organize.by.type", "false");
-        props.setProperty("output.preserve.structure", "false");
-
-        props.setProperty("content.include.metadata", "true");
-        props.setProperty("content.include.images", "true");
-        props.setProperty("content.include.tables", "true");
-        props.setProperty("content.page.break.mode", "heading");
-
-        props.setProperty("ocr.enable", "false");
-        props.setProperty("ocr.engine", "tess4j");
-        props.setProperty("ocr.language", "auto");
-        props.setProperty("ocr.endpoint", "");
-        props.setProperty("ocr.api.key", "");
-        props.setProperty("ocr.model", "");
-        props.setProperty("ocr.timeout", "30000");
-        props.setProperty("ocr.poll.interval", "5000");
-
-        props.setProperty("format.image", "markdown");
-        props.setProperty("format.table", "github");
-
-        props.setProperty("performance.parallel", "false");
-        props.setProperty("performance.threads", "0");
-        props.setProperty("performance.optimize.memory", "false");
-        props.setProperty("performance.max.file.size", "52428800");
-        props.setProperty("performance.batch.size", "20");
-
-        props.setProperty("ui.verbose", "false");
-        props.setProperty("ui.quiet", "false");
-        props.setProperty("ui.progress", "false");
-        props.setProperty("ui.interactive", "false");
-        props.setProperty("ui.stats", "false");
-
-        props.setProperty("files.recursive", "false");
-        props.setProperty("files.batch", "false");
-        props.setProperty("files.large.file", "false");
-
-        props.setProperty("logging.level", "1");
-    }
-
-    private void loadYamlFile(Path configPath, Properties props) {
+    private void loadYamlFile(Path configPath, Map<String, String> resolvedValues, Map<String, TrackedValue> tracked,
+                              ConfigSource source) {
         if (configPath == null) {
             return;
         }
@@ -131,27 +97,12 @@ public class ConfigurationManager {
                 Map<String, String> flattened = new LinkedHashMap<>();
                 flattenYaml("", yamlData, flattened);
                 for (Map.Entry<String, String> entry : flattened.entrySet()) {
-                    props.setProperty(normalizeYamlKey(entry.getKey()), entry.getValue());
+                    setTrackedProperty(resolvedValues, tracked, normalizeYamlKey(entry.getKey()), entry.getValue(), source);
                 }
             }
             logger.info("Loaded YAML configuration: {}", configPath);
         } catch (Exception e) {
             logger.warn("Failed to load YAML configuration {}: {}", configPath, e.getMessage());
-        }
-    }
-
-    private void loadLegacyProperties(Path configPath, Properties props) {
-        if (configPath == null) {
-            return;
-        }
-
-        try (FileInputStream fis = new FileInputStream(configPath.toFile())) {
-            Properties legacy = new Properties();
-            legacy.load(new InputStreamReader(fis, StandardCharsets.UTF_8));
-            props.putAll(legacy);
-            logger.info("Loaded legacy properties configuration: {}", configPath);
-        } catch (Exception e) {
-            logger.warn("Failed to load legacy properties configuration {}: {}", configPath, e.getMessage());
         }
     }
 
@@ -195,131 +146,170 @@ public class ConfigurationManager {
         return Files.exists(path) ? path : null;
     }
 
-    private Path findConfigFile(String fileName) {
-        for (String path : getConfigSearchPaths()) {
-            Path configPath = ".".equals(path) ? Paths.get(fileName) : Paths.get(path, fileName);
-            if (Files.exists(configPath)) {
-                return configPath;
-            }
+    private Map<String, TrackedValue> initializeTrackedDefaults(Map<String, String> defaults) {
+        Map<String, TrackedValue> tracked = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : defaults.entrySet()) {
+            tracked.put(entry.getKey(), new TrackedValue(entry.getValue(), ConfigSource.DEFAULT));
         }
-        return null;
+        return tracked;
     }
 
-    private List<String> getConfigSearchPaths() {
-        return Arrays.asList(
-                baseDirectory.toString(),
-                baseDirectory.resolve("config").toString(),
-                System.getProperty("user.home"),
-                "/etc/markitdown"
-        );
+    private void setTrackedProperty(Map<String, String> resolvedValues, Map<String, TrackedValue> tracked,
+                                    String key, String value, ConfigSource source) {
+        resolvedValues.put(key, value);
+        tracked.put(key, new TrackedValue(value, source));
     }
 
-    private void applyEnvironmentVariables(Properties props, Properties defaults) {
-        applyEnvironmentVariableIfSupplemental(props, defaults, "TESSERACT_PATH", "tesseract.path");
-        applyEnvironmentVariableIfSupplemental(props, defaults, "TESSDATA_PATH", "tessdata.path");
-        applyEnvironmentVariableIfSupplemental(props, defaults, "MARKITDOWN_OUTPUT_DIR", "output.dir");
-        applyEnvironmentVariableIfSupplemental(props, defaults, "MARKITDOWN_IMAGE_DIR", "output.image.dir");
-        applyEnvironmentVariableIfSupplemental(props, defaults, "MARKITDOWN_TEMP_DIR", "output.temp.dir");
-
-        applyEnvironmentVariableIfSupplemental(props, defaults, "MARKITDOWN_OCR_ENGINE", "ocr.engine");
-        applyEnvironmentVariableIfSupplemental(props, defaults, "MARKITDOWN_OCR_ENDPOINT", "ocr.endpoint");
-        applyEnvironmentVariableIfSupplemental(props, defaults, "MARKITDOWN_OCR_API_KEY", "ocr.api.key");
-        applyEnvironmentVariableIfSupplemental(props, defaults, "MARKITDOWN_OCR_MODEL", "ocr.model");
-        applyEnvironmentVariableIfSupplemental(props, defaults, "MARKITDOWN_OCR_TIMEOUT", "ocr.timeout");
-        applyEnvironmentVariableIfSupplemental(props, defaults, "MARKITDOWN_OCR_POLL_INTERVAL", "ocr.poll.interval");
-
-        applyEnvironmentVariableIfSupplemental(props, defaults, "PADDLE_OCR_TOKEN", "ocr.api.key");
-        applyEnvironmentVariableIfSupplemental(props, defaults, "PADDLE_OCR_JOB_URL", "ocr.endpoint");
-        applyEnvironmentVariableIfSupplemental(props, defaults, "PADDLE_OCR_MODEL", "ocr.model");
-        applyEnvironmentVariableIfSupplemental(props, defaults, "PADDLE_OCR_POLL_INTERVAL_MS", "ocr.poll.interval");
+    public String getPropertySource(ConfigKey key) {
+        if (key == null) {
+            return "unknown";
+        }
+        TrackedValue trackedValue = trackedProperties.get(key.key);
+        return trackedValue == null ? "unknown" : trackedValue.source.label;
     }
 
-    private void applyEnvironmentVariableIfSupplemental(Properties props, Properties defaults,
-                                                        String envName, String propertyName) {
-        String envValue = System.getenv(envName);
-        if (envValue == null || envValue.isBlank()) {
+    public Map<String, TrackedValue> getTrackedProperties() {
+        return new LinkedHashMap<>(trackedProperties);
+    }
+
+    private void applyOverride(ConfigKey key, String value, ConfigSource source) {
+        if (key == null || value == null || source == null) {
             return;
         }
-
-        String currentValue = props.getProperty(propertyName);
-        String defaultValue = defaults.getProperty(propertyName);
-        if (currentValue == null || currentValue.isBlank() || Objects.equals(currentValue, defaultValue)) {
-            props.setProperty(propertyName, envValue);
-        }
+        setTrackedProperty(values, trackedProperties, key.key, value, source);
+        effectiveConfiguration = null;
     }
 
-    public String getProperty(String key) {
-        return properties.getProperty(key);
+    private void applyOverride(ConfigKey key, boolean value, ConfigSource source) {
+        applyOverride(key, String.valueOf(value), source);
     }
 
-    public String getProperty(String key, String defaultValue) {
-        return properties.getProperty(key, defaultValue);
+    private void applyOverride(ConfigKey key, int value, ConfigSource source) {
+        applyOverride(key, String.valueOf(value), source);
     }
 
-    public boolean getBooleanProperty(String key, boolean defaultValue) {
-        String value = properties.getProperty(key);
-        return value == null ? defaultValue : Boolean.parseBoolean(value);
+    private void applyOverride(ConfigKey key, long value, ConfigSource source) {
+        applyOverride(key, String.valueOf(value), source);
     }
 
-    public int getIntProperty(String key, int defaultValue) {
-        String value = properties.getProperty(key);
-        if (value == null) {
-            return defaultValue;
-        }
-        try {
-            return Integer.parseInt(value);
-        } catch (NumberFormatException e) {
-            logger.warn("Invalid integer for {}='{}', using default {}", key, value, defaultValue);
-            return defaultValue;
-        }
+    public void overrideContentIncludeImages(boolean value, ConfigSource source) {
+        applyOverride(ConfigKey.CONTENT_INCLUDE_IMAGES, value, source);
     }
 
-    public long getLongProperty(String key, long defaultValue) {
-        String value = properties.getProperty(key);
-        if (value == null) {
-            return defaultValue;
-        }
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException e) {
-            logger.warn("Invalid long for {}='{}', using default {}", key, value, defaultValue);
-            return defaultValue;
-        }
+    public void overrideContentIncludeTables(boolean value, ConfigSource source) {
+        applyOverride(ConfigKey.CONTENT_INCLUDE_TABLES, value, source);
     }
 
-    public Properties getAllProperties() {
-        Properties copy = new Properties();
-        copy.putAll(properties);
-        return copy;
+    public void overrideContentIncludeMetadata(boolean value, ConfigSource source) {
+        applyOverride(ConfigKey.CONTENT_INCLUDE_METADATA, value, source);
+    }
+
+    public void overrideOcrEnabled(boolean value, ConfigSource source) {
+        applyOverride(ConfigKey.OCR_ENABLE, value, source);
+    }
+
+    public void overrideOcrLanguage(String value, ConfigSource source) {
+        applyOverride(ConfigKey.OCR_LANGUAGE, value, source);
+    }
+
+    public void overrideOcrEngine(String value, ConfigSource source) {
+        applyOverride(ConfigKey.OCR_ENGINE, value, source);
+    }
+
+    public void overrideOcrEndpoint(String value, ConfigSource source) {
+        applyOverride(ConfigKey.OCR_ENDPOINT, value, source);
+    }
+
+    public void overrideOcrApiKey(String value, ConfigSource source) {
+        applyOverride(ConfigKey.OCR_API_KEY, value, source);
+    }
+
+    public void overrideOcrModel(String value, ConfigSource source) {
+        applyOverride(ConfigKey.OCR_MODEL, value, source);
+    }
+
+    public void overrideOcrTimeout(int value, ConfigSource source) {
+        applyOverride(ConfigKey.OCR_TIMEOUT, value, source);
+    }
+
+    public void overrideOcrPollInterval(int value, ConfigSource source) {
+        applyOverride(ConfigKey.OCR_POLL_INTERVAL, value, source);
+    }
+
+    public void overrideTableFormat(String value, ConfigSource source) {
+        applyOverride(ConfigKey.FORMAT_TABLE, value, source);
+    }
+
+    public void overrideImageFormat(String value, ConfigSource source) {
+        applyOverride(ConfigKey.FORMAT_IMAGE, value, source);
+    }
+
+    public void overrideOutputImageDir(String value, ConfigSource source) {
+        applyOverride(ConfigKey.OUTPUT_IMAGE_DIR, value, source);
+    }
+
+    public void overrideOutputTempDir(String value, ConfigSource source) {
+        applyOverride(ConfigKey.OUTPUT_TEMP_DIR, value, source);
+    }
+
+    public void overridePerformanceMaxFileSize(long value, ConfigSource source) {
+        applyOverride(ConfigKey.PERFORMANCE_MAX_FILE_SIZE, value, source);
+    }
+
+    public void overridePerformanceParallel(boolean value, ConfigSource source) {
+        applyOverride(ConfigKey.PERFORMANCE_PARALLEL, value, source);
+    }
+
+    public void overridePerformanceThreads(int value, ConfigSource source) {
+        applyOverride(ConfigKey.PERFORMANCE_THREADS, value, source);
+    }
+
+    public void overridePerformanceOptimizeMemory(boolean value, ConfigSource source) {
+        applyOverride(ConfigKey.PERFORMANCE_OPTIMIZE_MEMORY, value, source);
+    }
+
+    public void overrideUiProgress(boolean value, ConfigSource source) {
+        applyOverride(ConfigKey.UI_PROGRESS, value, source);
+    }
+
+    public void overrideUiStats(boolean value, ConfigSource source) {
+        applyOverride(ConfigKey.UI_STATS, value, source);
+    }
+
+    public void overrideUiVerbose(boolean value, ConfigSource source) {
+        applyOverride(ConfigKey.UI_VERBOSE, value, source);
+    }
+
+    public void overrideUiQuiet(boolean value, ConfigSource source) {
+        applyOverride(ConfigKey.UI_QUIET, value, source);
+    }
+
+    public void overrideFilesRecursive(boolean value, ConfigSource source) {
+        applyOverride(ConfigKey.FILES_RECURSIVE, value, source);
+    }
+
+    public void overrideFilesBatch(boolean value, ConfigSource source) {
+        applyOverride(ConfigKey.FILES_BATCH, value, source);
+    }
+
+    public void overrideFilesLargeFile(boolean value, ConfigSource source) {
+        applyOverride(ConfigKey.FILES_LARGE_FILE, value, source);
     }
 
     public void saveConfiguration(Path outputPath) throws IOException {
-        if (isYamlFile(outputPath)) {
-            writeYamlConfiguration(outputPath, properties);
-            return;
+        if (!isYamlFile(outputPath)) {
+            throw new IOException("Only YAML configuration files are supported: " + outputPath);
         }
-
-        try (FileOutputStream fos = new FileOutputStream(outputPath.toFile())) {
-            properties.store(fos, "MarkItDown Java Configuration File");
-            logger.info("Saved configuration to {}", outputPath);
-        }
+        writeYamlConfiguration(outputPath, values);
     }
 
     public void generateDefaultConfig(Path outputPath) throws IOException {
-        Properties defaultProps = createDefaultProperties();
-        if (isYamlFile(outputPath)) {
-            writeYamlConfiguration(outputPath, defaultProps);
-            logger.info("Generated default YAML configuration at {}", outputPath);
-            return;
+        if (!isYamlFile(outputPath)) {
+            throw new IOException("Only YAML configuration files are supported: " + outputPath);
         }
-
-        try (FileOutputStream fos = new FileOutputStream(outputPath.toFile())) {
-            defaultProps.store(fos,
-                    "# MarkItDown Java Configuration File\n" +
-                            "# Generated at: " + new Date()
-            );
-            logger.info("Generated default properties configuration at {}", outputPath);
-        }
+        Map<String, String> defaultValues = createDefaultValues();
+        writeYamlConfiguration(outputPath, defaultValues);
+        logger.info("Generated default YAML configuration at {}", outputPath);
     }
 
     private boolean isYamlFile(Path path) {
@@ -327,47 +317,74 @@ public class ConfigurationManager {
         return fileName.endsWith(".yml") || fileName.endsWith(".yaml");
     }
 
-    private void writeYamlConfiguration(Path outputPath, Properties source) throws IOException {
+    private void writeYamlConfiguration(Path outputPath, Map<String, String> source) throws IOException {
         Map<String, Object> yaml = buildYamlMap(source);
         try (Writer writer = Files.newBufferedWriter(outputPath, StandardCharsets.UTF_8)) {
             YAML_MAPPER.writeValue(writer, yaml);
         }
     }
 
-    private Map<String, Object> buildYamlMap(Properties source) {
+    private Map<String, Object> buildYamlMap(Map<String, String> source) {
         Map<String, Object> root = new LinkedHashMap<>();
 
-        putYamlValue(root, "app.profile", source.getProperty("app.profile", "default"));
+        putYamlValue(root, ConfigKey.TESSERACT_PATH.yamlPath, stringValue(source, ConfigKey.TESSERACT_PATH));
+        putYamlValue(root, ConfigKey.TESSDATA_PATH.yamlPath, stringValue(source, ConfigKey.TESSDATA_PATH));
 
-        putYamlValue(root, "ocr.enabled", Boolean.parseBoolean(source.getProperty("ocr.enable", "false")));
-        putYamlValue(root, "ocr.engine", source.getProperty("ocr.engine", "tess4j"));
-        putYamlValue(root, "ocr.endpoint", source.getProperty("ocr.endpoint", ""));
-        putYamlValue(root, "ocr.api_key", source.getProperty("ocr.api.key", ""));
-        putYamlValue(root, "ocr.model", source.getProperty("ocr.model", ""));
-        putYamlValue(root, "ocr.timeout", Integer.parseInt(source.getProperty("ocr.timeout", "30000")));
-        putYamlValue(root, "ocr.poll_interval", Integer.parseInt(source.getProperty("ocr.poll.interval", "5000")));
-        putYamlValue(root, "ocr.language", source.getProperty("ocr.language", "auto"));
+        putYamlValue(root, ConfigKey.OUTPUT_DIR.yamlPath, stringValue(source, ConfigKey.OUTPUT_DIR));
+        putYamlValue(root, ConfigKey.OUTPUT_IMAGE_DIR.yamlPath, stringValue(source, ConfigKey.OUTPUT_IMAGE_DIR));
+        putYamlValue(root, ConfigKey.OUTPUT_TEMP_DIR.yamlPath, stringValue(source, ConfigKey.OUTPUT_TEMP_DIR));
+        putYamlValue(root, ConfigKey.OUTPUT_ORGANIZE_BY_TYPE.yamlPath, booleanValue(source, ConfigKey.OUTPUT_ORGANIZE_BY_TYPE));
+        putYamlValue(root, ConfigKey.OUTPUT_PRESERVE_STRUCTURE.yamlPath, booleanValue(source, ConfigKey.OUTPUT_PRESERVE_STRUCTURE));
 
-        putYamlValue(root, "content.include_metadata", Boolean.parseBoolean(source.getProperty("content.include.metadata", "true")));
-        putYamlValue(root, "content.include_images", Boolean.parseBoolean(source.getProperty("content.include.images", "true")));
-        putYamlValue(root, "content.include_tables", Boolean.parseBoolean(source.getProperty("content.include.tables", "true")));
-        putYamlValue(root, "content.page_break_mode", source.getProperty("content.page.break.mode", "heading"));
+        putYamlValue(root, ConfigKey.CONTENT_INCLUDE_METADATA.yamlPath, booleanValue(source, ConfigKey.CONTENT_INCLUDE_METADATA));
+        putYamlValue(root, ConfigKey.CONTENT_INCLUDE_IMAGES.yamlPath, booleanValue(source, ConfigKey.CONTENT_INCLUDE_IMAGES));
+        putYamlValue(root, ConfigKey.CONTENT_INCLUDE_TABLES.yamlPath, booleanValue(source, ConfigKey.CONTENT_INCLUDE_TABLES));
+        putYamlValue(root, ConfigKey.CONTENT_PAGE_BREAK_MODE.yamlPath, stringValue(source, ConfigKey.CONTENT_PAGE_BREAK_MODE));
 
-        putYamlValue(root, "output.dir", source.getProperty("output.dir", "./output"));
-        putYamlValue(root, "output.image_dir", source.getProperty("output.image.dir", "assets"));
-        putYamlValue(root, "output.preserve_structure", Boolean.parseBoolean(source.getProperty("output.preserve.structure", "false")));
-        putYamlValue(root, "output.organize_by_type", Boolean.parseBoolean(source.getProperty("output.organize.by.type", "false")));
+        putYamlValue(root, ConfigKey.OCR_ENABLE.yamlPath, booleanValue(source, ConfigKey.OCR_ENABLE));
+        putYamlValue(root, ConfigKey.OCR_ENGINE.yamlPath, stringValue(source, ConfigKey.OCR_ENGINE));
+        putYamlValue(root, ConfigKey.OCR_LANGUAGE.yamlPath, stringValue(source, ConfigKey.OCR_LANGUAGE));
+        putYamlValue(root, ConfigKey.OCR_ENDPOINT.yamlPath, stringValue(source, ConfigKey.OCR_ENDPOINT));
+        putYamlValue(root, ConfigKey.OCR_API_KEY.yamlPath, stringValue(source, ConfigKey.OCR_API_KEY));
+        putYamlValue(root, ConfigKey.OCR_MODEL.yamlPath, stringValue(source, ConfigKey.OCR_MODEL));
+        putYamlValue(root, ConfigKey.OCR_TIMEOUT.yamlPath, intValue(source, ConfigKey.OCR_TIMEOUT));
+        putYamlValue(root, ConfigKey.OCR_POLL_INTERVAL.yamlPath, intValue(source, ConfigKey.OCR_POLL_INTERVAL));
 
-        putYamlValue(root, "format.image", source.getProperty("format.image", "markdown"));
-        putYamlValue(root, "format.table", source.getProperty("format.table", "github"));
+        putYamlValue(root, ConfigKey.FORMAT_IMAGE.yamlPath, stringValue(source, ConfigKey.FORMAT_IMAGE));
+        putYamlValue(root, ConfigKey.FORMAT_TABLE.yamlPath, stringValue(source, ConfigKey.FORMAT_TABLE));
 
-        putYamlValue(root, "performance.parallel", Boolean.parseBoolean(source.getProperty("performance.parallel", "false")));
-        putYamlValue(root, "performance.threads", Integer.parseInt(source.getProperty("performance.threads", "0")));
-        putYamlValue(root, "performance.optimize_memory", Boolean.parseBoolean(source.getProperty("performance.optimize.memory", "false")));
-        putYamlValue(root, "performance.max_file_size", Long.parseLong(source.getProperty("performance.max.file.size", "52428800")));
-        putYamlValue(root, "performance.batch_size", Integer.parseInt(source.getProperty("performance.batch.size", "20")));
+        putYamlValue(root, ConfigKey.PERFORMANCE_PARALLEL.yamlPath, booleanValue(source, ConfigKey.PERFORMANCE_PARALLEL));
+        putYamlValue(root, ConfigKey.PERFORMANCE_THREADS.yamlPath, intValue(source, ConfigKey.PERFORMANCE_THREADS));
+        putYamlValue(root, ConfigKey.PERFORMANCE_OPTIMIZE_MEMORY.yamlPath, booleanValue(source, ConfigKey.PERFORMANCE_OPTIMIZE_MEMORY));
+        putYamlValue(root, ConfigKey.PERFORMANCE_MAX_FILE_SIZE.yamlPath, longValue(source, ConfigKey.PERFORMANCE_MAX_FILE_SIZE));
+        putYamlValue(root, ConfigKey.PERFORMANCE_BATCH_SIZE.yamlPath, intValue(source, ConfigKey.PERFORMANCE_BATCH_SIZE));
+
+        putYamlValue(root, ConfigKey.UI_VERBOSE.yamlPath, booleanValue(source, ConfigKey.UI_VERBOSE));
+        putYamlValue(root, ConfigKey.UI_QUIET.yamlPath, booleanValue(source, ConfigKey.UI_QUIET));
+        putYamlValue(root, ConfigKey.UI_PROGRESS.yamlPath, booleanValue(source, ConfigKey.UI_PROGRESS));
+        putYamlValue(root, ConfigKey.UI_STATS.yamlPath, booleanValue(source, ConfigKey.UI_STATS));
+
+        putYamlValue(root, ConfigKey.FILES_RECURSIVE.yamlPath, booleanValue(source, ConfigKey.FILES_RECURSIVE));
+        putYamlValue(root, ConfigKey.FILES_BATCH.yamlPath, booleanValue(source, ConfigKey.FILES_BATCH));
+        putYamlValue(root, ConfigKey.FILES_LARGE_FILE.yamlPath, booleanValue(source, ConfigKey.FILES_LARGE_FILE));
 
         return root;
+    }
+
+    private String stringValue(Map<String, String> source, ConfigKey key) {
+        return source.getOrDefault(key.key, key.defaultValue);
+    }
+
+    private boolean booleanValue(Map<String, String> source, ConfigKey key) {
+        return Boolean.parseBoolean(stringValue(source, key));
+    }
+
+    private int intValue(Map<String, String> source, ConfigKey key) {
+        return Integer.parseInt(stringValue(source, key));
+    }
+
+    private long longValue(Map<String, String> source, ConfigKey key) {
+        return Long.parseLong(stringValue(source, key));
     }
 
     @SuppressWarnings("unchecked")
@@ -388,71 +405,119 @@ public class ConfigurationManager {
             return errors;
         }
 
-        Properties testProps = createDefaultProperties();
-        if (isYamlFile(configPath)) {
-            loadYamlFile(configPath, testProps);
-        } else {
-            loadLegacyProperties(configPath, testProps);
+        Map<String, String> testValues = createDefaultValues();
+        Map<String, TrackedValue> tracked = initializeTrackedDefaults(testValues);
+        if (!isYamlFile(configPath)) {
+            errors.add("Only YAML configuration files are supported: " + configPath);
+            return errors;
+        }
+        if (!loadYamlFileForValidation(configPath, testValues, tracked, errors)) {
+            return errors;
         }
 
-        validatePathConfig(testProps, errors);
-        validateBooleanConfig(testProps, errors);
-        validateNumericConfig(testProps, errors);
-        validateEnumConfig(testProps, errors);
+        validatePathConfig(testValues, errors);
+        validateBooleanConfig(testValues, errors);
+        validateNumericConfig(testValues, errors);
+        validateEnumConfig(testValues, errors);
+        validateSemanticConfig(testValues, errors);
 
         return errors;
     }
 
-    private void validatePathConfig(Properties props, List<String> errors) {
-        String[] pathConfigs = {
-                "tesseract.path", "tessdata.path", "output.dir",
-                "output.image.dir", "output.temp.dir"
-        };
-
-        for (String config : pathConfigs) {
-            String value = props.getProperty(config);
-            if (value != null && !value.trim().isEmpty()) {
-                Path path = Paths.get(value);
-                if (!Files.exists(path)) {
-                    errors.add("Path does not exist: " + config + " = " + value);
+    private boolean loadYamlFileForValidation(Path configPath, Map<String, String> values,
+                                              Map<String, TrackedValue> tracked,
+                                              List<String> errors) {
+        try {
+            Map<String, Object> yamlData = YAML_MAPPER.readValue(
+                    Files.newBufferedReader(configPath, StandardCharsets.UTF_8),
+                    new TypeReference<Map<String, Object>>() {}
+            );
+            if (yamlData != null) {
+                Map<String, String> flattened = new LinkedHashMap<>();
+                flattenYaml("", yamlData, flattened);
+                validateKnownKeys(flattened, errors);
+                for (Map.Entry<String, String> entry : flattened.entrySet()) {
+                    setTrackedProperty(values, tracked, normalizeYamlKey(entry.getKey()), entry.getValue(), ConfigSource.EXPLICIT_YAML);
                 }
+            }
+            return true;
+        } catch (Exception e) {
+            errors.add("Failed to parse YAML configuration: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private void validatePathConfig(Map<String, String> values, List<String> errors) {
+        String tesseractPath = values.get("tesseract.path");
+        if (tesseractPath != null && !tesseractPath.trim().isEmpty()) {
+            Path path = Paths.get(tesseractPath);
+            if (!Files.exists(path)) {
+                errors.add("Tesseract path does not exist: " + tesseractPath);
+            } else if (Files.isDirectory(path)) {
+                errors.add("Tesseract path must point to an executable file: " + tesseractPath);
+            }
+        }
+
+        String tessdataPath = values.get("tessdata.path");
+        if (tessdataPath != null && !tessdataPath.trim().isEmpty()) {
+            Path path = Paths.get(tessdataPath);
+            if (!Files.exists(path)) {
+                errors.add("Tessdata path does not exist: " + tessdataPath);
+            } else if (!Files.isDirectory(path)) {
+                errors.add("Tessdata path must be a directory: " + tessdataPath);
+            }
+        }
+
+        for (String config : Arrays.asList("output.dir", "output.temp.dir")) {
+            String value = values.get(config);
+            if (value == null || value.trim().isEmpty()) {
+                continue;
+            }
+            Path path = Paths.get(value);
+            if (Files.exists(path) && !Files.isDirectory(path)) {
+                errors.add(config + " must be a directory path: " + value);
             }
         }
     }
 
-    private void validateBooleanConfig(Properties props, List<String> errors) {
+    private void validateBooleanConfig(Map<String, String> values, List<String> errors) {
         String[] boolConfigs = {
                 "content.include.metadata", "content.include.images", "content.include.tables",
                 "ocr.enable", "output.organize.by.type", "output.preserve.structure",
                 "performance.parallel", "performance.optimize.memory",
-                "ui.verbose", "ui.quiet", "ui.progress", "ui.interactive",
+                "ui.verbose", "ui.quiet", "ui.progress",
                 "files.recursive", "files.batch", "files.large.file"
         };
 
         for (String config : boolConfigs) {
-            String value = props.getProperty(config);
+            String value = values.get(config);
             if (value != null && !value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
                 errors.add("Invalid boolean: " + config + " = " + value);
             }
         }
     }
 
-    private void validateNumericConfig(Properties props, List<String> errors) {
-        for (String config : Arrays.asList("performance.threads", "performance.batch.size", "logging.level", "ocr.timeout", "ocr.poll.interval")) {
-            String value = props.getProperty(config);
+    private void validateNumericConfig(Map<String, String> values, List<String> errors) {
+        for (String config : Arrays.asList("performance.threads", "performance.batch.size", "ocr.timeout", "ocr.poll.interval")) {
+            String value = values.get(config);
             if (value == null) {
                 continue;
             }
             try {
-                if (Integer.parseInt(value) < 0) {
+                int parsed = Integer.parseInt(value);
+                if (parsed < 0) {
                     errors.add("Negative integer is not allowed: " + config + " = " + value);
+                }
+                if (("performance.batch.size".equals(config) || "ocr.timeout".equals(config) || "ocr.poll.interval".equals(config))
+                        && parsed == 0) {
+                    errors.add("Zero is not allowed for " + config + ": " + value);
                 }
             } catch (NumberFormatException e) {
                 errors.add("Invalid integer: " + config + " = " + value);
             }
         }
 
-        String maxFileSize = props.getProperty("performance.max.file.size");
+        String maxFileSize = values.get("performance.max.file.size");
         if (maxFileSize != null) {
             try {
                 if (Long.parseLong(maxFileSize) < 0) {
@@ -464,15 +529,16 @@ public class ConfigurationManager {
         }
     }
 
-    private void validateEnumConfig(Properties props, List<String> errors) {
-        validateEnum(props, errors, "ocr.language", new String[]{"auto", "eng", "chi_sim", "chi_tra", "jpn", "kor", "fra", "deu"});
-        validateEnum(props, errors, "format.image", new String[]{"markdown", "html", "base64"});
-        validateEnum(props, errors, "format.table", new String[]{"github", "markdown", "pipe"});
-        validateEnum(props, errors, "ocr.engine", new String[]{"tess4j", "tesseract-cli", "paddleocr", "http"});
+    private void validateEnumConfig(Map<String, String> values, List<String> errors) {
+        validateEnum(values, errors, "ocr.language", new String[]{"auto", "eng", "chi_sim", "chi_tra", "jpn", "kor", "fra", "deu"});
+        validateEnum(values, errors, "format.image", new String[]{"markdown", "html", "base64"});
+        validateEnum(values, errors, "format.table", new String[]{"github", "markdown", "pipe"});
+        validateEnum(values, errors, "ocr.engine", new String[]{"tesseract-cli", "paddleocr", "http"});
+        validateEnum(values, errors, "content.page.break.mode", new String[]{"heading", "rule", "none"});
     }
 
-    private void validateEnum(Properties props, List<String> errors, String key, String[] validValues) {
-        String value = props.getProperty(key);
+    private void validateEnum(Map<String, String> values, List<String> errors, String key, String[] validValues) {
+        String value = values.get(key);
         if (value == null || value.isBlank()) {
             return;
         }
@@ -484,120 +550,170 @@ public class ConfigurationManager {
         errors.add("Invalid value for " + key + ": " + value);
     }
 
+    private void validateSemanticConfig(Map<String, String> values, List<String> errors) {
+        boolean ocrEnabled = Boolean.parseBoolean(values.getOrDefault("ocr.enable", "false"));
+        String ocrEngine = values.getOrDefault("ocr.engine", "tesseract-cli");
+        String ocrEndpoint = values.getOrDefault("ocr.endpoint", "");
+
+        if (ocrEnabled && "http".equals(ocrEngine) && (ocrEndpoint == null || ocrEndpoint.isBlank())) {
+            errors.add("ocr.endpoint is required when OCR is enabled and ocr.engine=http");
+        }
+
+        boolean verbose = Boolean.parseBoolean(values.getOrDefault("ui.verbose", "false"));
+        boolean quiet = Boolean.parseBoolean(values.getOrDefault("ui.quiet", "false"));
+        boolean progress = Boolean.parseBoolean(values.getOrDefault("ui.progress", "false"));
+
+        if (verbose && quiet) {
+            errors.add("ui.verbose and ui.quiet cannot both be true");
+        }
+        if (quiet && progress) {
+            errors.add("ui.progress cannot be enabled when ui.quiet is true");
+        }
+    }
+
+    private void validateKnownKeys(Map<String, String> flattened, List<String> errors) {
+        Set<String> knownKeys = new HashSet<>();
+        Set<String> knownTopLevelSections = new HashSet<>();
+
+        for (ConfigKey key : ConfigKey.values()) {
+            knownKeys.add(key.key);
+            knownTopLevelSections.add(key.yamlPath.split("\\.")[0]);
+        }
+        knownTopLevelSections.add("providers");
+
+        for (String rawKey : flattened.keySet()) {
+            String normalizedKey = normalizeYamlKey(rawKey);
+            String topLevelSection = rawKey.contains(".")
+                    ? rawKey.substring(0, rawKey.indexOf('.'))
+                    : rawKey;
+
+            if (!knownTopLevelSections.contains(topLevelSection)) {
+                errors.add("Unknown configuration section: " + topLevelSection);
+                continue;
+            }
+
+            if (normalizedKey.startsWith("providers.")) {
+                continue;
+            }
+
+            if (!knownKeys.contains(normalizedKey)) {
+                errors.add("Unknown configuration key: " + rawKey);
+            }
+        }
+    }
+
     public ConversionOptions createConversionOptionsFromConfig() {
-        return ConversionOptions.builder()
-                .includeMetadata(getBooleanProperty("content.include.metadata", true))
-                .includeImages(getBooleanProperty("content.include.images", true))
-                .includeTables(getBooleanProperty("content.include.tables", true))
-                .useOcr(getBooleanProperty("ocr.enable", false))
-                .language(getProperty("ocr.language", "auto"))
-                .ocrEngine(getProperty("ocr.engine", "tess4j"))
-                .ocrEndpoint(getProperty("ocr.endpoint", ""))
-                .ocrApiKey(getProperty("ocr.api.key", ""))
-                .ocrModel(getProperty("ocr.model", ""))
-                .ocrTimeout(getIntProperty("ocr.timeout", 30000))
-                .ocrPollInterval(getIntProperty("ocr.poll.interval", 5000))
-                .imageFormat(getProperty("format.image", "markdown"))
-                .tableFormat(getProperty("format.table", "github"))
-                .maxFileSize(getLongProperty("performance.max.file.size", 50L * 1024 * 1024))
-                .build();
+        return getEffectiveConfiguration().toConversionOptions();
     }
 
-    public String getTesseractPath() {
-        return getProperty("tesseract.path", "");
+    public EffectiveConfiguration getEffectiveConfiguration() {
+        if (effectiveConfiguration != null) {
+            return effectiveConfiguration;
+        }
+
+        Setting<String> tesseractPath = trackedString(ConfigKey.TESSERACT_PATH);
+        Setting<String> tessdataPath = trackedString(ConfigKey.TESSDATA_PATH);
+
+        Setting<String> outputDir = trackedString(ConfigKey.OUTPUT_DIR);
+        Setting<String> imageDir = trackedString(ConfigKey.OUTPUT_IMAGE_DIR);
+        Setting<String> tempDir = trackedString(ConfigKey.OUTPUT_TEMP_DIR);
+        Setting<Boolean> organizeByType = trackedBoolean(ConfigKey.OUTPUT_ORGANIZE_BY_TYPE);
+        Setting<Boolean> preserveStructure = trackedBoolean(ConfigKey.OUTPUT_PRESERVE_STRUCTURE);
+
+        Setting<Boolean> includeMetadata = trackedBoolean(ConfigKey.CONTENT_INCLUDE_METADATA);
+        Setting<Boolean> includeImages = trackedBoolean(ConfigKey.CONTENT_INCLUDE_IMAGES);
+        Setting<Boolean> includeTables = trackedBoolean(ConfigKey.CONTENT_INCLUDE_TABLES);
+        Setting<String> pageBreakMode = trackedString(ConfigKey.CONTENT_PAGE_BREAK_MODE);
+
+        Setting<Boolean> useOcr = trackedBoolean(ConfigKey.OCR_ENABLE);
+        Setting<String> ocrEngine = trackedString(ConfigKey.OCR_ENGINE);
+        Setting<String> ocrLanguage = trackedString(ConfigKey.OCR_LANGUAGE);
+        Setting<String> ocrEndpoint = trackedString(ConfigKey.OCR_ENDPOINT);
+        Setting<String> ocrApiKey = trackedString(ConfigKey.OCR_API_KEY);
+        Setting<String> ocrModel = trackedString(ConfigKey.OCR_MODEL);
+        Setting<Integer> ocrTimeout = trackedInt(ConfigKey.OCR_TIMEOUT);
+        Setting<Integer> ocrPollInterval = trackedInt(ConfigKey.OCR_POLL_INTERVAL);
+
+        Setting<String> imageFormat = trackedString(ConfigKey.FORMAT_IMAGE);
+        Setting<String> tableFormat = trackedString(ConfigKey.FORMAT_TABLE);
+
+        Setting<Boolean> parallel = trackedBoolean(ConfigKey.PERFORMANCE_PARALLEL);
+        Setting<Integer> threads = trackedInt(ConfigKey.PERFORMANCE_THREADS);
+        Setting<Boolean> optimizeMemory = trackedBoolean(ConfigKey.PERFORMANCE_OPTIMIZE_MEMORY);
+        Setting<Integer> batchSize = trackedInt(ConfigKey.PERFORMANCE_BATCH_SIZE);
+        Setting<Boolean> largeFile = trackedBoolean(ConfigKey.FILES_LARGE_FILE);
+        Setting<Long> maxFileSize = largeFile.value()
+                ? new Setting<>(0L, largeFile.source())
+                : trackedLong(ConfigKey.PERFORMANCE_MAX_FILE_SIZE);
+
+        Setting<Boolean> verbose = trackedBoolean(ConfigKey.UI_VERBOSE);
+        Setting<Boolean> quiet = trackedBoolean(ConfigKey.UI_QUIET);
+        Setting<Boolean> progress = trackedBoolean(ConfigKey.UI_PROGRESS);
+        Setting<Boolean> stats = trackedBoolean(ConfigKey.UI_STATS);
+
+        Setting<Boolean> recursive = trackedBoolean(ConfigKey.FILES_RECURSIVE);
+        Setting<Boolean> batch = trackedBoolean(ConfigKey.FILES_BATCH);
+
+        effectiveConfiguration = new EffectiveConfiguration(
+                new EngineSettings(tesseractPath, tessdataPath),
+                new OutputSettings(outputDir, imageDir, tempDir, organizeByType, preserveStructure),
+                new ContentSettings(includeMetadata, includeImages, includeTables, pageBreakMode),
+                new OcrSettings(useOcr, ocrEngine, ocrLanguage, ocrEndpoint, ocrApiKey, ocrModel, ocrTimeout, ocrPollInterval),
+                new FormatSettings(imageFormat, tableFormat),
+                new PerformanceSettings(parallel, threads, maxFileSize, optimizeMemory, batchSize),
+                new UiSettings(verbose, quiet, progress, stats),
+                new FileSettings(recursive, batch, largeFile),
+                getTrackedProperties()
+        );
+        return effectiveConfiguration;
     }
 
-    public String getTessdataPath() {
-        return getProperty("tessdata.path", "");
+    private Setting<String> trackedString(ConfigKey key) {
+        return new Setting<>(values.getOrDefault(key.key, key.defaultValue), trackedSource(key));
     }
 
-    public String getOcrEngine() {
-        return getProperty("ocr.engine", "tess4j");
+    private Setting<Boolean> trackedBoolean(ConfigKey key) {
+        String value = values.get(key.key);
+        return new Setting<>(value == null ? Boolean.parseBoolean(key.defaultValue) : Boolean.parseBoolean(value), trackedSource(key));
     }
 
-    public String getOcrEndpoint() {
-        return getProperty("ocr.endpoint", "");
+    private Setting<Integer> trackedInt(ConfigKey key) {
+        return new Setting<>(readIntValue(key), trackedSource(key));
     }
 
-    public String getOcrApiKey() {
-        return getProperty("ocr.api.key", "");
+    private Setting<Long> trackedLong(ConfigKey key) {
+        return new Setting<>(readLongValue(key), trackedSource(key));
     }
 
-    public int getOcrTimeout() {
-        return getIntProperty("ocr.timeout", 30000);
+    private ConfigSource trackedSource(ConfigKey key) {
+        TrackedValue trackedValue = trackedProperties.get(key.key);
+        return trackedValue == null ? ConfigSource.DEFAULT : trackedValue.source;
     }
 
-    public String getOcrModel() {
-        return getProperty("ocr.model", "");
+    private int readIntValue(ConfigKey key) {
+        String value = values.get(key.key);
+        if (value == null) {
+            return Integer.parseInt(key.defaultValue);
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            logger.warn("Invalid integer for {}='{}', using default {}", key.key, value, key.defaultValue);
+            return Integer.parseInt(key.defaultValue);
+        }
     }
 
-    public int getOcrPollInterval() {
-        return getIntProperty("ocr.poll.interval", 5000);
-    }
-
-    public String getOutputDir() {
-        return getProperty("output.dir", "./output");
-    }
-
-    public String getImageDir() {
-        return getProperty("output.image.dir", "assets");
-    }
-
-    public String getTempDir() {
-        return getProperty("output.temp.dir", System.getProperty("java.io.tmpdir"));
-    }
-
-    public boolean isOrganizeByType() {
-        return getBooleanProperty("output.organize.by.type", false);
-    }
-
-    public boolean isPreserveStructure() {
-        return getBooleanProperty("output.preserve.structure", false);
-    }
-
-    public boolean isParallelProcessing() {
-        return getBooleanProperty("performance.parallel", false);
-    }
-
-    public int getThreadCount() {
-        int threads = getIntProperty("performance.threads", 0);
-        return threads == 0 ? Runtime.getRuntime().availableProcessors() : threads;
-    }
-
-    public boolean isMemoryOptimization() {
-        return getBooleanProperty("performance.optimize.memory", false);
-    }
-
-    public boolean isInteractiveMode() {
-        return getBooleanProperty("ui.interactive", false);
-    }
-
-    public boolean isShowProgress() {
-        return getBooleanProperty("ui.progress", false);
-    }
-
-    public boolean isShowStats() {
-        return getBooleanProperty("ui.stats", false);
-    }
-
-    public boolean isVerbose() {
-        return getBooleanProperty("ui.verbose", false);
-    }
-
-    public boolean isQuiet() {
-        return getBooleanProperty("ui.quiet", false);
-    }
-
-    public boolean isRecursive() {
-        return getBooleanProperty("files.recursive", false);
-    }
-
-    public boolean isBatch() {
-        return getBooleanProperty("files.batch", false);
-    }
-
-    public boolean isLargeFile() {
-        return getBooleanProperty("files.large.file", false);
+    private long readLongValue(ConfigKey key) {
+        String value = values.get(key.key);
+        if (value == null) {
+            return Long.parseLong(key.defaultValue);
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            logger.warn("Invalid long for {}='{}', using default {}", key.key, value, key.defaultValue);
+            return Long.parseLong(key.defaultValue);
+        }
     }
 
     public String getDefaultConfigFileName() {
@@ -608,11 +724,539 @@ public class ConfigurationManager {
         return LOCAL_YAML_CONFIG_FILE;
     }
 
-    public String getLegacyConfigFileName() {
-        return LEGACY_PROPERTIES_CONFIG_FILE;
-    }
-
     public String getExampleConfigFileName() {
         return EXAMPLE_YAML_CONFIG_FILE;
+    }
+
+    public enum ConfigSource {
+        DEFAULT("default"),
+        PROJECT_YAML("project-yaml"),
+        LOCAL_YAML("local-yaml"),
+        EXPLICIT_YAML("explicit-yaml"),
+        CLI("cli");
+
+        private final String label;
+
+        ConfigSource(String label) {
+            this.label = label;
+        }
+    }
+
+    public enum ConfigKey {
+        TESSERACT_PATH("tesseract.path", "tesseract.path", ""),
+        TESSDATA_PATH("tessdata.path", "tessdata.path", ""),
+        OUTPUT_DIR("output.dir", "output.dir", "./output"),
+        OUTPUT_IMAGE_DIR("output.image.dir", "output.image_dir", "assets"),
+        OUTPUT_TEMP_DIR("output.temp.dir", "output.temp_dir", System.getProperty("java.io.tmpdir")),
+        OUTPUT_ORGANIZE_BY_TYPE("output.organize.by.type", "output.organize_by_type", "false"),
+        OUTPUT_PRESERVE_STRUCTURE("output.preserve.structure", "output.preserve_structure", "false"),
+        CONTENT_INCLUDE_METADATA("content.include.metadata", "content.include_metadata", "true"),
+        CONTENT_INCLUDE_IMAGES("content.include.images", "content.include_images", "true"),
+        CONTENT_INCLUDE_TABLES("content.include.tables", "content.include_tables", "true"),
+        CONTENT_PAGE_BREAK_MODE("content.page.break.mode", "content.page_break_mode", "heading"),
+        OCR_ENABLE("ocr.enable", "ocr.enabled", "false"),
+        OCR_ENGINE("ocr.engine", "ocr.engine", "tesseract-cli"),
+        OCR_LANGUAGE("ocr.language", "ocr.language", "auto"),
+        OCR_ENDPOINT("ocr.endpoint", "ocr.endpoint", ""),
+        OCR_API_KEY("ocr.api.key", "ocr.api_key", ""),
+        OCR_MODEL("ocr.model", "ocr.model", ""),
+        OCR_TIMEOUT("ocr.timeout", "ocr.timeout", "30000"),
+        OCR_POLL_INTERVAL("ocr.poll.interval", "ocr.poll_interval", "5000"),
+        FORMAT_IMAGE("format.image", "format.image", "markdown"),
+        FORMAT_TABLE("format.table", "format.table", "github"),
+        PERFORMANCE_PARALLEL("performance.parallel", "performance.parallel", "false"),
+        PERFORMANCE_THREADS("performance.threads", "performance.threads", "0"),
+        PERFORMANCE_OPTIMIZE_MEMORY("performance.optimize.memory", "performance.optimize_memory", "false"),
+        PERFORMANCE_MAX_FILE_SIZE("performance.max.file.size", "performance.max_file_size", "52428800"),
+        PERFORMANCE_BATCH_SIZE("performance.batch.size", "performance.batch_size", "20"),
+        UI_VERBOSE("ui.verbose", "ui.verbose", "false"),
+        UI_QUIET("ui.quiet", "ui.quiet", "false"),
+        UI_PROGRESS("ui.progress", "ui.progress", "false"),
+        UI_STATS("ui.stats", "ui.stats", "false"),
+        FILES_RECURSIVE("files.recursive", "files.recursive", "false"),
+        FILES_BATCH("files.batch", "files.batch", "false"),
+        FILES_LARGE_FILE("files.large.file", "files.large_file", "false");
+
+        private final String key;
+        private final String yamlPath;
+        private final String defaultValue;
+
+        ConfigKey(String key, String yamlPath, String defaultValue) {
+            this.key = key;
+            this.yamlPath = yamlPath;
+            this.defaultValue = defaultValue;
+        }
+    }
+
+    public static final class TrackedValue {
+        private final String value;
+        private final ConfigSource source;
+
+        public TrackedValue(String value, ConfigSource source) {
+            this.value = value;
+            this.source = source;
+        }
+
+        public String getValue() {
+            return value;
+        }
+
+        public ConfigSource getSource() {
+            return source;
+        }
+    }
+
+    public static final class Setting<T> {
+        private final T value;
+        private final ConfigSource source;
+
+        public Setting(T value, ConfigSource source) {
+            this.value = value;
+            this.source = source;
+        }
+
+        public T value() {
+            return value;
+        }
+
+        public ConfigSource source() {
+            return source;
+        }
+
+        public String sourceLabel() {
+            return source.label;
+        }
+    }
+
+    public static final class EffectiveConfiguration {
+        private final EngineSettings engine;
+        private final OutputSettings output;
+        private final ContentSettings content;
+        private final OcrSettings ocr;
+        private final FormatSettings format;
+        private final PerformanceSettings performance;
+        private final UiSettings ui;
+        private final FileSettings files;
+        private final Map<String, TrackedValue> trackedProperties;
+
+        private EffectiveConfiguration(EngineSettings engine,
+                                       OutputSettings output,
+                                       ContentSettings content,
+                                       OcrSettings ocr,
+                                       FormatSettings format,
+                                       PerformanceSettings performance,
+                                       UiSettings ui,
+                                       FileSettings files,
+                                       Map<String, TrackedValue> trackedProperties) {
+            this.engine = engine;
+            this.output = output;
+            this.content = content;
+            this.ocr = ocr;
+            this.format = format;
+            this.performance = performance;
+            this.ui = ui;
+            this.files = files;
+            this.trackedProperties = Collections.unmodifiableMap(new LinkedHashMap<>(trackedProperties));
+        }
+
+        public EngineSettings engine() {
+            return engine;
+        }
+
+        public OutputSettings output() {
+            return output;
+        }
+
+        public ContentSettings content() {
+            return content;
+        }
+
+        public OcrSettings ocr() {
+            return ocr;
+        }
+
+        public FormatSettings format() {
+            return format;
+        }
+
+        public PerformanceSettings performance() {
+            return performance;
+        }
+
+        public UiSettings ui() {
+            return ui;
+        }
+
+        public FileSettings files() {
+            return files;
+        }
+
+        public Map<String, TrackedValue> trackedProperties() {
+            return trackedProperties;
+        }
+
+        public Map<String, Object> toStructuredMap() {
+            Map<String, Object> root = new LinkedHashMap<>();
+
+            putStructuredValue(root, "tesseract.path", engine.tesseractPath.value());
+            putStructuredValue(root, "tessdata.path", engine.tessdataPath.value());
+
+            putStructuredValue(root, "output.dir", output.dir.value());
+            putStructuredValue(root, "output.image_dir", output.imageDir.value());
+            putStructuredValue(root, "output.temp_dir", output.tempDir.value());
+            putStructuredValue(root, "output.organize_by_type", output.organizeByType.value());
+            putStructuredValue(root, "output.preserve_structure", output.preserveStructure.value());
+
+            putStructuredValue(root, "content.include_metadata", content.includeMetadata.value());
+            putStructuredValue(root, "content.include_images", content.includeImages.value());
+            putStructuredValue(root, "content.include_tables", content.includeTables.value());
+            putStructuredValue(root, "content.page_break_mode", content.pageBreakMode.value());
+
+            putStructuredValue(root, "ocr.enabled", ocr.enabled.value());
+            putStructuredValue(root, "ocr.engine", ocr.engine.value());
+            putStructuredValue(root, "ocr.language", ocr.language.value());
+            putStructuredValue(root, "ocr.endpoint", ocr.endpoint.value());
+            putStructuredValue(root, "ocr.api_key", ocr.apiKey.value());
+            putStructuredValue(root, "ocr.model", ocr.model.value());
+            putStructuredValue(root, "ocr.timeout", ocr.timeout.value());
+            putStructuredValue(root, "ocr.poll_interval", ocr.pollInterval.value());
+
+            putStructuredValue(root, "format.image", format.image.value());
+            putStructuredValue(root, "format.table", format.table.value());
+
+            putStructuredValue(root, "performance.parallel", performance.parallel.value());
+            putStructuredValue(root, "performance.threads", performance.threads.value());
+            putStructuredValue(root, "performance.optimize_memory", performance.optimizeMemory.value());
+            putStructuredValue(root, "performance.max_file_size", performance.maxFileSize.value());
+            putStructuredValue(root, "performance.batch_size", performance.batchSize.value());
+
+            putStructuredValue(root, "ui.verbose", ui.verbose.value());
+            putStructuredValue(root, "ui.quiet", ui.quiet.value());
+            putStructuredValue(root, "ui.progress", ui.progress.value());
+            putStructuredValue(root, "ui.stats", ui.stats.value());
+
+            putStructuredValue(root, "files.recursive", files.recursive.value());
+            putStructuredValue(root, "files.batch", files.batch.value());
+            putStructuredValue(root, "files.large_file", files.largeFile.value());
+
+            return root;
+        }
+
+        @SuppressWarnings("unchecked")
+        private void putStructuredValue(Map<String, Object> root, String path, Object value) {
+            String[] parts = path.split("\\.");
+            Map<String, Object> current = root;
+            for (int i = 0; i < parts.length - 1; i++) {
+                current = (Map<String, Object>) current.computeIfAbsent(parts[i], ignored -> new LinkedHashMap<>());
+            }
+            current.put(parts[parts.length - 1], value);
+        }
+
+        public ConversionOptions toConversionOptions() {
+            ConversionOptions.Builder builder = ConversionOptions.builder()
+                    .includeMetadata(content.includeMetadata.value())
+                    .includeImages(content.includeImages.value())
+                    .includeTables(content.includeTables.value())
+                    .pageBreakMode(content.pageBreakMode.value())
+                    .useOcr(ocr.enabled.value())
+                    .language(ocr.language.value())
+                    .ocrEngine(ocr.engine.value())
+                    .ocrEndpoint(ocr.endpoint.value())
+                    .ocrApiKey(ocr.apiKey.value())
+                    .ocrModel(ocr.model.value())
+                    .ocrTimeout(ocr.timeout.value())
+                    .ocrPollInterval(ocr.pollInterval.value())
+                    .imageFormat(format.image.value())
+                    .tableFormat(format.table.value())
+                    .imageOutputDir(output.imageDir.value())
+                    .maxFileSize(performance.maxFileSize.value())
+                    .tesseractPath(engine.tesseractPath.value())
+                    .tessdataPath(engine.tessdataPath.value());
+
+            String tempDirectory = output.tempDir.value();
+            if (tempDirectory != null && !tempDirectory.isBlank()) {
+                builder.tempDirectory(Paths.get(tempDirectory));
+            }
+            return builder.build();
+        }
+    }
+
+    public static final class EngineSettings {
+        private final Setting<String> tesseractPath;
+        private final Setting<String> tessdataPath;
+
+        private EngineSettings(Setting<String> tesseractPath, Setting<String> tessdataPath) {
+            this.tesseractPath = tesseractPath;
+            this.tessdataPath = tessdataPath;
+        }
+
+        public Setting<String> tesseractPath() {
+            return tesseractPath;
+        }
+
+        public Setting<String> tessdataPath() {
+            return tessdataPath;
+        }
+    }
+
+    public static final class OutputSettings {
+        private final Setting<String> dir;
+        private final Setting<String> imageDir;
+        private final Setting<String> tempDir;
+        private final Setting<Boolean> organizeByType;
+        private final Setting<Boolean> preserveStructure;
+
+        private OutputSettings(Setting<String> dir,
+                               Setting<String> imageDir,
+                               Setting<String> tempDir,
+                               Setting<Boolean> organizeByType,
+                               Setting<Boolean> preserveStructure) {
+            this.dir = dir;
+            this.imageDir = imageDir;
+            this.tempDir = tempDir;
+            this.organizeByType = organizeByType;
+            this.preserveStructure = preserveStructure;
+        }
+
+        public Setting<String> dir() {
+            return dir;
+        }
+
+        public Setting<String> imageDir() {
+            return imageDir;
+        }
+
+        public Setting<String> tempDir() {
+            return tempDir;
+        }
+
+        public Setting<Boolean> organizeByType() {
+            return organizeByType;
+        }
+
+        public Setting<Boolean> preserveStructure() {
+            return preserveStructure;
+        }
+    }
+
+    public static final class ContentSettings {
+        private final Setting<Boolean> includeMetadata;
+        private final Setting<Boolean> includeImages;
+        private final Setting<Boolean> includeTables;
+        private final Setting<String> pageBreakMode;
+
+        private ContentSettings(Setting<Boolean> includeMetadata,
+                                Setting<Boolean> includeImages,
+                                Setting<Boolean> includeTables,
+                                Setting<String> pageBreakMode) {
+            this.includeMetadata = includeMetadata;
+            this.includeImages = includeImages;
+            this.includeTables = includeTables;
+            this.pageBreakMode = pageBreakMode;
+        }
+
+        public Setting<Boolean> includeMetadata() {
+            return includeMetadata;
+        }
+
+        public Setting<Boolean> includeImages() {
+            return includeImages;
+        }
+
+        public Setting<Boolean> includeTables() {
+            return includeTables;
+        }
+
+        public Setting<String> pageBreakMode() {
+            return pageBreakMode;
+        }
+    }
+
+    public static final class OcrSettings {
+        private final Setting<Boolean> enabled;
+        private final Setting<String> engine;
+        private final Setting<String> language;
+        private final Setting<String> endpoint;
+        private final Setting<String> apiKey;
+        private final Setting<String> model;
+        private final Setting<Integer> timeout;
+        private final Setting<Integer> pollInterval;
+
+        private OcrSettings(Setting<Boolean> enabled,
+                            Setting<String> engine,
+                            Setting<String> language,
+                            Setting<String> endpoint,
+                            Setting<String> apiKey,
+                            Setting<String> model,
+                            Setting<Integer> timeout,
+                            Setting<Integer> pollInterval) {
+            this.enabled = enabled;
+            this.engine = engine;
+            this.language = language;
+            this.endpoint = endpoint;
+            this.apiKey = apiKey;
+            this.model = model;
+            this.timeout = timeout;
+            this.pollInterval = pollInterval;
+        }
+
+        public Setting<Boolean> enabled() {
+            return enabled;
+        }
+
+        public Setting<String> engine() {
+            return engine;
+        }
+
+        public Setting<String> language() {
+            return language;
+        }
+
+        public Setting<String> endpoint() {
+            return endpoint;
+        }
+
+        public Setting<String> apiKey() {
+            return apiKey;
+        }
+
+        public Setting<String> model() {
+            return model;
+        }
+
+        public Setting<Integer> timeout() {
+            return timeout;
+        }
+
+        public Setting<Integer> pollInterval() {
+            return pollInterval;
+        }
+    }
+
+    public static final class FormatSettings {
+        private final Setting<String> image;
+        private final Setting<String> table;
+
+        private FormatSettings(Setting<String> image, Setting<String> table) {
+            this.image = image;
+            this.table = table;
+        }
+
+        public Setting<String> image() {
+            return image;
+        }
+
+        public Setting<String> table() {
+            return table;
+        }
+    }
+
+    public static final class PerformanceSettings {
+        private final Setting<Boolean> parallel;
+        private final Setting<Integer> threads;
+        private final Setting<Long> maxFileSize;
+        private final Setting<Boolean> optimizeMemory;
+        private final Setting<Integer> batchSize;
+
+        private PerformanceSettings(Setting<Boolean> parallel,
+                                    Setting<Integer> threads,
+                                    Setting<Long> maxFileSize,
+                                    Setting<Boolean> optimizeMemory,
+                                    Setting<Integer> batchSize) {
+            this.parallel = parallel;
+            this.threads = threads;
+            this.maxFileSize = maxFileSize;
+            this.optimizeMemory = optimizeMemory;
+            this.batchSize = batchSize;
+        }
+
+        public Setting<Boolean> parallel() {
+            return parallel;
+        }
+
+        public Setting<Integer> threads() {
+            return threads;
+        }
+
+        public Setting<Long> maxFileSize() {
+            return maxFileSize;
+        }
+
+        public Setting<Boolean> optimizeMemory() {
+            return optimizeMemory;
+        }
+
+        public Setting<Integer> batchSize() {
+            return batchSize;
+        }
+    }
+
+    public static final class UiSettings {
+        private final Setting<Boolean> verbose;
+        private final Setting<Boolean> quiet;
+        private final Setting<Boolean> progress;
+        private final Setting<Boolean> stats;
+
+        private UiSettings(Setting<Boolean> verbose,
+                           Setting<Boolean> quiet,
+                           Setting<Boolean> progress,
+                           Setting<Boolean> stats) {
+            this.verbose = verbose;
+            this.quiet = quiet;
+            this.progress = progress;
+            this.stats = stats;
+        }
+
+        public Setting<Boolean> verbose() {
+            return verbose;
+        }
+
+        public Setting<Boolean> quiet() {
+            return quiet;
+        }
+
+        public Setting<Boolean> progress() {
+            return progress;
+        }
+
+        public Setting<Boolean> stats() {
+            return stats;
+        }
+    }
+
+    public static final class FileSettings {
+        private final Setting<Boolean> recursive;
+        private final Setting<Boolean> batch;
+        private final Setting<Boolean> largeFile;
+
+        private FileSettings(Setting<Boolean> recursive,
+                             Setting<Boolean> batch,
+                             Setting<Boolean> largeFile) {
+            this.recursive = recursive;
+            this.batch = batch;
+            this.largeFile = largeFile;
+        }
+
+        public Setting<Boolean> recursive() {
+            return recursive;
+        }
+
+        public Setting<Boolean> batch() {
+            return batch;
+        }
+
+        public Setting<Boolean> largeFile() {
+            return largeFile;
+        }
+    }
+
+    private static final class LoadedConfiguration {
+        private final Map<String, String> values;
+        private final Map<String, TrackedValue> trackedProperties;
+
+        private LoadedConfiguration(Map<String, String> values, Map<String, TrackedValue> trackedProperties) {
+            this.values = values;
+            this.trackedProperties = trackedProperties;
+        }
     }
 }

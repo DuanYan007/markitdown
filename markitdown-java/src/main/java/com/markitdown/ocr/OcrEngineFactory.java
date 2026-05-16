@@ -14,7 +14,6 @@ public final class OcrEngineFactory {
     private static final Map<String, OcrProvider> PROVIDERS = new LinkedHashMap<>();
 
     static {
-        register(new Tess4jOcrProvider());
         register(new TesseractCliOcrProvider());
         register(new HttpOcrProvider());
         register(new PaddleOcrProvider());
@@ -38,13 +37,13 @@ public final class OcrEngineFactory {
     }
 
     public static OcrEngine create(ConversionOptions options) {
-        if (options == null || !options.isUseOcr()) {
+        if (options == null || !options.ocr().enabled()) {
             return new UnavailableOcrEngine("OCR is disabled");
         }
 
-        String providerName = options.getOcrEngine();
+        String providerName = options.ocr().engine();
         if (providerName == null || providerName.isBlank()) {
-            providerName = "tess4j";
+            providerName = "tesseract-cli";
         }
 
         OcrProvider provider = PROVIDERS.get(providerName.toLowerCase());

@@ -14,9 +14,15 @@ import java.util.List;
 public class TesseractCliOcrEngine implements OcrEngine {
 
     private final String configuredPath;
+    private final String tessdataPath;
 
     public TesseractCliOcrEngine(String configuredPath) {
+        this(configuredPath, null);
+    }
+
+    public TesseractCliOcrEngine(String configuredPath, String tessdataPath) {
         this.configuredPath = configuredPath;
+        this.tessdataPath = tessdataPath;
     }
 
     @Override
@@ -37,6 +43,12 @@ public class TesseractCliOcrEngine implements OcrEngine {
         command.add(resolveExecutable());
         command.add(imageFile.getAbsolutePath());
         command.add("stdout");
+
+        String effectiveTessdataPath = resolveTessdataPath();
+        if (effectiveTessdataPath != null) {
+            command.add("--tessdata-dir");
+            command.add(effectiveTessdataPath);
+        }
 
         String effectiveLanguage = (language == null || language.isBlank()) ? "eng+chi_sim" : language;
         command.add("-l");
@@ -90,6 +102,13 @@ public class TesseractCliOcrEngine implements OcrEngine {
 
         String executableName = isWindows() ? "tesseract.exe" : "tesseract";
         return new File(configured, executableName).getAbsolutePath();
+    }
+
+    private String resolveTessdataPath() {
+        if (tessdataPath == null || tessdataPath.isBlank()) {
+            return null;
+        }
+        return new File(tessdataPath).getAbsolutePath();
     }
 
     private boolean isWindows() {

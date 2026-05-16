@@ -1,78 +1,41 @@
 package com.markitdown.api;
 
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Objects;
 
 /**
- * @class ConversionResult
- * @brief 文档转换结果类，封装转换操作的所有输出信息
- * @details 包含转换后的Markdown内容、元数据、警告信息、文件信息和转换状态
- *          支持成功和失败两种结果状态，提供不可变的结果对象
- *          使用防御性拷贝确保数据的线程安全性
+ * Immutable-style result object returned by document converters.
  *
- * @author duan yan
- * @version 2.0.0
- * @since 2.0.0
+ * <p>The result bundles rendered Markdown, extracted metadata, warning
+ * messages, basic source file information, and the success state of the
+ * conversion.</p>
  */
 public class ConversionResult {
 
-    // ==================== 实例变量 ====================
-
-    /**
-     * @brief 转换后的Markdown内容
-     * @details 存储转换生成的Markdown格式文本内容
-     */
     private final String markdownContent;
-
-    /**
-     * @brief 转换元数据
-     * @details 包含文档属性、转换统计等元信息
-     */
     private final Map<String, Object> metadata;
-
-    /**
-     * @brief 警告信息列表
-     * @details 记录转换过程中产生的警告和错误信息
-     */
     private final List<String> warnings;
-
-    /**
-     * @brief 转换时间戳
-     * @details 记录转换操作执行的时间
-     */
     private final LocalDateTime conversionTime;
-
-    /**
-     * @brief 原始文件大小
-     * @details 原始文件的字节大小
-     */
     private final long fileSize;
-
-    /**
-     * @brief 原始文件名
-     * @details 转换前文件的原始名称
-     */
     private final String originalFileName;
-
-    /**
-     * @brief 转换成功状态
-     * @details 标识转换操作是否成功完成
-     */
     private final boolean successful;
 
-    // ==================== 构造函数 ====================
-
     /**
-     * @brief 创建成功的转换结果
-     * @details 构造一个表示转换成功的结果对象，包含完整的转换内容和元数据
-     * @param markdownContent 转换后的Markdown内容，可以为null
-     * @param metadata       转换元数据映射，可以为null
-     * @param warnings       转换过程中的警告信息列表，可以为null
-     * @param fileSize       原始文件大小（字节）
-     * @param originalFileName 原始文件名，可以为null
+     * Creates a successful conversion result.
+     *
+     * @param markdownContent rendered Markdown content
+     * @param metadata extracted metadata
+     * @param warnings conversion warnings
+     * @param fileSize source file size in bytes
+     * @param originalFileName source file name
      */
     public ConversionResult(String markdownContent, Map<String, Object> metadata,
-                           List<String> warnings, long fileSize, String originalFileName) {
+                            List<String> warnings, long fileSize, String originalFileName) {
         this.markdownContent = markdownContent != null ? markdownContent : "";
         this.metadata = new HashMap<>(metadata != null ? metadata : Collections.emptyMap());
         this.warnings = new ArrayList<>(warnings != null ? warnings : Collections.emptyList());
@@ -83,11 +46,11 @@ public class ConversionResult {
     }
 
     /**
-     * @brief 创建失败的转换结果
-     * @details 构造一个表示转换失败的结果对象，仅包含错误信息和基本文件信息
-     * @param warnings 转换失败时的错误信息列表，可以为null
-     * @param fileSize 原始文件大小（字节）
-     * @param originalFileName 原始文件名，可以为null
+     * Creates a failed conversion result.
+     *
+     * @param warnings failure warnings or error summaries
+     * @param fileSize source file size in bytes
+     * @param originalFileName source file name
      */
     public ConversionResult(List<String> warnings, long fileSize, String originalFileName) {
         this.markdownContent = "";
@@ -99,85 +62,83 @@ public class ConversionResult {
         this.successful = false;
     }
 
-    // ==================== Getter方法 ====================
-
     /**
-     * @brief 获取转换后的Markdown内容
-     * @details 返回转换生成的Markdown格式文本内容
-     * @return String Markdown内容，转换失败时返回空字符串
+     * Returns the rendered text content.
+     *
+     * @return Markdown content
      */
     public String getTextContent() {
         return markdownContent;
     }
 
     /**
-     * @brief 获取转换元数据
-     * @details 返回包含文档属性和转换统计信息的不可变映射
-     * @return Map<String,Object> 不可变的元数据映射
+     * Returns an immutable metadata view.
+     *
+     * @return metadata map
      */
     public Map<String, Object> getMetadata() {
         return Collections.unmodifiableMap(metadata);
     }
 
     /**
-     * Gets the list of warnings.
+     * Returns the warning list.
      *
-     * @return an immutable list of warnings
+     * @return immutable warnings list
      */
     public List<String> getWarnings() {
         return Collections.unmodifiableList(warnings);
     }
 
     /**
-     * Gets the time when the conversion was performed.
+     * Returns the conversion timestamp.
      *
-     * @return the conversion timestamp
+     * @return conversion timestamp
      */
     public LocalDateTime getConversionTime() {
         return conversionTime;
     }
 
     /**
-     * Gets the original file size in bytes.
+     * Returns the source file size in bytes.
      *
-     * @return the file size
+     * @return file size
      */
     public long getFileSize() {
         return fileSize;
     }
 
     /**
-     * Gets the original file name.
+     * Returns the original source file name.
      *
-     * @return the original file name
+     * @return original file name
      */
     public String getOriginalFileName() {
         return originalFileName;
     }
 
     /**
-     * Checks if the conversion was successful.
+     * Indicates whether the conversion succeeded.
      *
-     * @return true if successful, false otherwise
+     * @return {@code true} when successful
      */
     public boolean isSuccessful() {
         return successful;
     }
 
     /**
-     * Gets the Markdown content.
+     * Returns the rendered Markdown.
      *
-     * @return the Markdown content
+     * @return Markdown content
      */
     public String getMarkdown() {
         return markdownContent;
     }
 
     /**
-     * Gets a specific metadata value.
+     * Looks up a metadata value by key.
      *
-     * @param key the metadata key
-     * @return the metadata value, or null if not found
+     * @param key metadata key
+     * @return typed metadata value or {@code null}
      */
     @SuppressWarnings("unchecked")
     public <T> T getMetadata(String key) {
@@ -185,9 +146,9 @@ public class ConversionResult {
     }
 
     /**
-     * Checks if there are any warnings.
+     * Checks whether warnings were recorded.
      *
-     * @return true if there are warnings, false otherwise
+     * @return {@code true} when warnings exist
      */
     public boolean hasWarnings() {
         return !warnings.isEmpty();
@@ -222,6 +183,6 @@ public class ConversionResult {
     @Override
     public int hashCode() {
         return Objects.hash(markdownContent, metadata, warnings, conversionTime,
-                          fileSize, originalFileName, successful);
+                fileSize, originalFileName, successful);
     }
 }

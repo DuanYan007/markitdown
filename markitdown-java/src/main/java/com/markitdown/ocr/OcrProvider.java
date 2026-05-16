@@ -8,7 +8,7 @@ import com.markitdown.config.ConversionOptions;
 public interface OcrProvider {
 
     /**
-     * User-facing provider name, e.g. tess4j or mock.
+     * User-facing provider name, e.g. tesseract-cli or mock.
      */
     String getName();
 
